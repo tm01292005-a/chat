@@ -24,6 +24,9 @@ const azureEnvVars = [
   "ADMIN_EMAIL_ADDRESS",
   "AZURE_SPEECH_REGION",
   "AZURE_SPEECH_KEY",
+  "AZURE_BLOB_ACCOUNT_NAME",
+  "AZURE_BLOB_SAS",
+  "AZURE_BLOB_CONTAINER_NAME",
 ] as const;
 
 type RequiredServerEnvKeys = (typeof azureEnvVars)[number];

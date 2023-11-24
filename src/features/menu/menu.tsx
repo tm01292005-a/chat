@@ -6,6 +6,7 @@ import {
   MessageCircle,
   PanelLeftClose,
   PanelRightClose,
+  FileAudio,
 } from "lucide-react";
 import Link from "next/link";
 import { ThemeToggle } from "../theme/theme-toggle";
@@ -43,6 +44,15 @@ export const MainMenu = () => {
         >
           <Link href="/" title="Chat">
             <MessageCircle />
+          </Link>
+        </Button>
+        <Button
+          asChild
+          className="rounded-full w-[40px] h-[40px] p-2 text-primary"
+          variant={"outline"}
+        >
+          <Link href="/audio" title="Audio">
+            <FileAudio />
           </Link>
         </Button>
         {session?.user?.isAdmin ? (
