@@ -3,3 +3,5 @@
 ・トランザクション削除
 ・文字起こしファイルの格納先
 →不明。
+
+Gfetog1ySBFPJ40OJoC6xM6sTa9ZOldtSmPLzCOoe68nsuSzrE9Qhm3WyHgVi3sxFjQBbdNQbKJ0ACDbhpaSGg==
