@@ -1,8 +1,10 @@
+"use server";
+
 import { BlobServiceClient } from "@azure/storage-blob";
 
-const ACCOUNT_NAME = process.env.NEXT_PUBLIC_AZURE_BLOB_ACCOUNT_NAME || "";
-const SAS = process.env.NEXT_PUBLIC_AZURE_BLOB_SAS || "";
-const CONTAINER_NAME = process.env.NEXT_PUBLIC_AZURE_BLOB_CONTAINER_NAME || "";
+const ACCOUNT_NAME = process.env.AZURE_BLOB_ACCOUNT_NAME || "";
+const SAS = process.env.AZURE_BLOB_SAS || "";
+const CONTAINER_NAME = process.env.AZURE_BLOB_CONTAINER_NAME || "";
 const BASE_URL = `https://${ACCOUNT_NAME}.blob.core.windows.net${SAS}`;
 
 /**
@@ -26,13 +28,14 @@ export const createContainer = async () => {
  * Upload Blob
  * @param blobPath blobPath
  * @param fileType fileType
- * @param arrayBuffer arrayBuffer
+ * @param arrayBufferStr string
  */
 export const uploadStream = async (
   blobPath: string,
   fileType: string,
-  arrayBuffer: ArrayBuffer
+  arrayBufferBase64: string
 ) => {
+  const arrayBuffer = base64ToArrayBuffer(arrayBufferBase64);
   const blobServiceClient = new BlobServiceClient(BASE_URL);
 
   const containerClient = blobServiceClient.getContainerClient(CONTAINER_NAME);
@@ -53,15 +56,30 @@ export const uploadStream = async (
 };
 
 /**
- * Download Blob
- * @param userId userId
- * @param fileName fileName
+ * Delete Blob
+ * @param blobPath string
  */
-export const downloadStream = async (userId: string, fileName: string) => {
+
+export const deleteBlob = async (blobPath: string) => {
+  const blobServiceClient = new BlobServiceClient(BASE_URL);
+  const containerClient = blobServiceClient.getContainerClient(CONTAINER_NAME);
+  const blobClient = containerClient.getBlobClient(blobPath);
+  const blockBlobClient = blobClient.getBlockBlobClient();
+  if (await blockBlobClient.exists()) {
+    await blockBlobClient.delete();
+    console.log(`Delete Successfully: `);
+  }
+};
+
+/**
+ * Download Blob
+ * @param blobPath blobPath
+ */
+export const downloadStream = async (blobPath: string) => {
   const blobServiceClient = new BlobServiceClient(BASE_URL);
 
   const containerClient = blobServiceClient.getContainerClient(CONTAINER_NAME);
-  const blobClient = containerClient.getBlobClient(`${userId}/${fileName}`);
+  const blobClient = containerClient.getBlobClient(blobPath);
   const blockBlobClient = blobClient.getBlockBlobClient();
 
   const downloadResponse = await blockBlobClient.download(0);
@@ -69,23 +87,6 @@ export const downloadStream = async (userId: string, fileName: string) => {
     downloadResponse.readableStreamBody
   );
   console.log(`Download Successfully: `, downloadedContent);
-};
-
-/**
- * Delete Blob
- * @param userId userId
- * @param fileName fileName
- */
-
-export const deleteBlob = async (userId: string, fileName: string) => {
-  const blobServiceClient = new BlobServiceClient(BASE_URL);
-
-  const containerClient = blobServiceClient.getContainerClient(CONTAINER_NAME);
-  const blobClient = containerClient.getBlobClient(`${userId}/${fileName}`);
-  const blockBlobClient = blobClient.getBlockBlobClient();
-
-  await blockBlobClient.delete();
-  console.log(`Delete Successfully: `);
 };
 
 async function streamToString(
@@ -102,3 +103,18 @@ async function streamToString(
     readableStream?.on("error", reject);
   });
 }
+
+/**
+ * base64String to ArrayBuffer
+ * @param base64 base64
+ * @returns ArrayBuffer
+ */
+const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
+  const binary_string = Buffer.from(base64, "base64").toString("binary");
+  const len = binary_string.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binary_string.charCodeAt(i);
+  }
+  return bytes.buffer;
+};

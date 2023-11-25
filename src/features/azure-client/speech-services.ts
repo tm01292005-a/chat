@@ -1,13 +1,14 @@
+"use server";
+
 import axios from "axios";
 import { StatusType } from "../audio/audio-services/models";
 
-const SPEECH_REGION = process.env.NEXT_PUBLIC_AZURE_SPEECH_REGION || "";
-const SPEECH_KEY = process.env.NEXT_PUBLIC_AZURE_SPEECH_KEY || "";
+const SPEECH_REGION = process.env.AZURE_SPEECH_REGION || "";
+const SPEECH_KEY = process.env.AZURE_SPEECH_KEY || "";
 const BASE_URL = `https://${SPEECH_REGION}.api.cognitive.microsoft.com/speechtotext/v3.1/`;
 
-const BLOB_ACCOUNT_NAME = process.env.NEXT_PUBLIC_AZURE_BLOB_ACCOUNT_NAME || "";
-const BLOB_CONTAINER_NAME =
-  process.env.NEXT_PUBLIC_AZURE_BLOB_CONTAINER_NAME || "";
+const BLOB_ACCOUNT_NAME = process.env.AZURE_BLOB_ACCOUNT_NAME || "";
+const BLOB_CONTAINER_NAME = process.env.AZURE_BLOB_CONTAINER_NAME || "";
 
 /**
  * Create transcription
@@ -33,8 +34,16 @@ export const createTranscription = async (
       data: {
         displayName: displayName,
         locale: locale,
-        punctuationMode: "Dictated", // 句読点を自動で付与
-        // timeToLive: "", // 保存期間。最大31日
+        punctuationMode: "Automatic", // 句読点を自動で付与
+        // timeToLive: "", // 保存期間。最大31日。削除処理を実装したためコメントアウト
+        // wordLevelTimestampsEnabled: true, // 単語レベルのタイムスタンプを付与
+        diarization: {
+          speakers: {
+            minCount: 1,
+            maxCount: 10,
+          },
+        }, // ダイアライゼーション分析を実施(3人以上の話者が予想される場合は必須)
+        diarizationEnabled: true, // ダイアライゼーション分析を実施(2人以上の話者が予想される場合は必須)
         contentUrls: [
           `https://${BLOB_ACCOUNT_NAME}.blob.core.windows.net/${BLOB_CONTAINER_NAME}/${blobPath}`,
         ],
@@ -143,22 +152,25 @@ export const deleteTranscription = async (
   transcriptionId: string
 ): Promise<any> => {
   return new Promise((resolve, reject) => {
-    axios({
+    const req = {
       baseURL: BASE_URL,
       url: `transcriptions/${transcriptionId}`,
       method: "delete",
       headers: { "Ocp-Apim-Subscription-Key": SPEECH_KEY },
-    })
+    };
+    console.info("Delete Transcription. req=", req);
+    axios(req)
       .then((res) => {
-        if (res.status === 200) {
+        if (res.status === 200 || res.status === 204) {
+          console.log(`Delete Transcription Successfully.`);
           resolve(res.data);
         } else {
-          console.log(`Get Transcription Files Faild. res=`, res);
+          console.log(`Delete Transcription Faild. res=`, res);
           throw new Error(res.statusText);
         }
       })
       .catch(function (error) {
-        console.log(`Get Transcription Files Faild. error=`, error);
+        console.log(`Delete Transcription Faild. error=`, error);
         throw new Error(error);
       });
   });
@@ -179,10 +191,7 @@ export const downloadTranscriptionData = async (
         if (res.status === 200) {
           const textArray = [];
           let datas: Array<any> = res.data.combinedRecognizedPhrases;
-          for (let i = 0; i < datas.length; i++) {
-            textArray.push(datas[i].lexical);
-          }
-          const text = textArray.join("\n");
+          const text = datas[0].display; // channel0のデータを取得
           console.log("text: ", text);
           resolve(text);
         } else {

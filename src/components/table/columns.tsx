@@ -93,6 +93,11 @@ export const columns: ColumnDef<TableSchema>[] = [
     },
   },
   {
+    accessorKey: "transcriptionId",
+    header: ({ column }) => <div className="h-0 w-0"></div>,
+    cell: ({ row }) => <div className="h-0 w-0"></div>,
+  },
+  {
     accessorKey: "status",
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Status" />
@@ -122,6 +127,12 @@ export const columns: ColumnDef<TableSchema>[] = [
       return value.includes(row.getValue(id));
     },
   },
+
+  {
+    accessorKey: "id",
+    header: ({ column }) => <div className="h-0 w-0"></div>,
+    cell: ({ row }) => <div className="h-0 w-0"></div>,
+  },
   {
     accessorKey: "createdAt",
     header: ({ column }) => (
@@ -146,40 +157,9 @@ export const columns: ColumnDef<TableSchema>[] = [
       <DataTableColumnHeader column={column} title="Download" />
     ),
     cell: ({ row }) => <DataTableRowDownloadActions row={row} />,
-    //filterFn: (row, id, value) => {
-    //  return value.includes(row.getValue(id));
-    //},
   },
-  /*
   {
     id: "actions",
     cell: ({ row }) => <DataTableRowActions row={row} />,
   },
-  */
-  {
-    accessorKey: "id",
-    header: ({ column }) => <div className="h-0 w-0"></div>,
-    cell: ({ row }) => <div className="h-0 w-0"></div>,
-  },
-  {
-    accessorKey: "transcriptionId",
-    header: ({ column }) => <div className="h-0 w-0"></div>,
-    cell: ({ row }) => <div className="h-0 w-0"></div>,
-  },
 ];
-
-/*
-          <Button
-            className=""
-            asChild
-            onChange={() => {
-              path = "aaa";
-            }}
-          >
-            <Link href={{ pathname: "/chat/" + getPath() }}></Link>
-          </Button>
-
-          <span className="max-w-[500px] truncate font-medium">
-            {row.getValue("download")}
-          </span>
-          */

@@ -15,68 +15,61 @@ interface DataTableRowActionsProps<TData> {
 export function DataTableRowDownloadActions<TData>({
   row,
 }: DataTableRowActionsProps<TData>) {
-  const handleDownload = async (transcriptionId: string): Promise<string> => {
-    const record = await downloadFile(transcriptionId);
-    return new Promise((resolve) => resolve(record.downloadLink));
-  };
-
-  /**
-   * ファイルダウンロード
-   * @param transcriptionId
-   */
-  const downloadFile = async (transcriptionId: string): Promise<any> => {
-    let downloadLink = null;
-
-    // ダウンロードリンク取得
+  const getDownloadLink = async (
+    transcriptionId: string
+  ): Promise<string | undefined> => {
     const records = await FindAudioRecordByTranscriptionID(transcriptionId);
     if (records.length === 0) {
       return;
     }
     const record = records[0];
     if (record.downloadLink == null || record.downloadLink.length === 0) {
-      downloadLink = await getTranscriptionFiles(transcriptionId);
-      record.downloadLink = downloadLink;
+      return await getTranscriptionFiles(transcriptionId);
     } else {
-      downloadLink = record.downloadLink;
+      return record.downloadLink;
     }
+  };
 
-    // 文字起こしファイルダウンロード
+  const downloadDataAsFile = async (
+    downloadLink: string,
+    recordName: string
+  ): Promise<void> => {
     const data = await downloadTranscriptionData(downloadLink);
-
-    // ダウンロード
     const blob = new Blob([data], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     document.body.appendChild(a);
-    a.download = record.name + ".txt";
+    a.download = recordName + ".txt";
     a.href = url;
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+  };
 
-    const newRecord = JSON.parse(JSON.stringify(record));
-    return new Promise((resolve) => resolve(newRecord));
+  const handleOnClick = async (transcriptionId: string): Promise<void> => {
+    const downloadLink = await getDownloadLink(transcriptionId);
+    if (!downloadLink) {
+      console.error("Download link could not be generated");
+      return;
+    }
+    const records = await FindAudioRecordByTranscriptionID(transcriptionId);
+    if (records.length === 0) {
+      return;
+    }
+    const record = records[0];
+    await downloadDataAsFile(downloadLink, record.name);
+    try {
+      await UpdateDownloadLink(transcriptionId, downloadLink);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   return (
     <div className="flex space-x-2">
       <Button
         className="w-24"
-        onClick={async () => {
-          (async () => {
-            const downloadLink = await handleDownload(
-              row.getValue("transcriptionId")
-            );
-            try {
-              await UpdateDownloadLink(
-                row.getValue("transcriptionId"),
-                downloadLink
-              );
-            } catch (e) {
-              console.error(e);
-            }
-          })();
-        }}
+        onClick={() => handleOnClick(row.getValue("transcriptionId"))}
       >
         Download
       </Button>
