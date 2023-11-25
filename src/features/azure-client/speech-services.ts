@@ -1,7 +1,7 @@
 "use server";
 
 import axios from "axios";
-import { StatusType } from "../audio/audio-services/models";
+import { StatusType, TRANSLATE_STATUS } from "../audio/audio-services/models";
 
 const SPEECH_REGION = process.env.AZURE_SPEECH_REGION || "";
 const SPEECH_KEY = process.env.AZURE_SPEECH_KEY || "";
@@ -9,6 +9,13 @@ const BASE_URL = `https://${SPEECH_REGION}.api.cognitive.microsoft.com/speechtot
 
 const BLOB_ACCOUNT_NAME = process.env.AZURE_BLOB_ACCOUNT_NAME || "";
 const BLOB_CONTAINER_NAME = process.env.AZURE_BLOB_CONTAINER_NAME || "";
+
+const SPEECH_TO_TEXT_SERVICE_STATUS = {
+  NOT_START: "NotStarted", // The long running operation has not yet started.
+  RUNNING: "Running", // The long running operation is currently processing.
+  SUCCEEDED: "Succeeded", // The long running operation has successfully completed.
+  FAILED: "Failed", // The long running operation has failed.
+};
 
 /**
  * Create transcription
@@ -221,17 +228,17 @@ const getTranscriptionId = async (selfUrl: string) => {
  * @param status azure speech to text status
  * @returns StatusType
  */
-const getStatus = (status: string) => {
+const getStatus = (status: string): StatusType => {
   switch (status) {
-    case "NotStarted": // The long running operation has not yet started.
-    case "Running": // The long running operation is currently processing.
-      return "in progress" as StatusType;
-    case "Succeeded": // The long running operation has successfully completed.
-      return "done" as StatusType;
-    case "Failed": // The long running operation has failed.
-      return "failed" as StatusType;
+    case SPEECH_TO_TEXT_SERVICE_STATUS.NOT_START:
+    case SPEECH_TO_TEXT_SERVICE_STATUS.RUNNING:
+      return TRANSLATE_STATUS.IN_PROGRESS as StatusType;
+    case SPEECH_TO_TEXT_SERVICE_STATUS.SUCCEEDED:
+      return TRANSLATE_STATUS.DONE as StatusType;
+    case SPEECH_TO_TEXT_SERVICE_STATUS.FAILED:
+      return TRANSLATE_STATUS.FAILED as StatusType;
     default:
       console.log(`unknown status. status=${status}`);
-      return "failed" as StatusType;
+      return TRANSLATE_STATUS.FAILED as StatusType;
   }
 };

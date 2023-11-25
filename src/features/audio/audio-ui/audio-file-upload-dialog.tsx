@@ -1,8 +1,9 @@
-import React, { FC, useCallback, useEffect, useState } from "react";
+"use client";
+
+import React, { FC, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useDropzone } from "react-dropzone";
-import { useGlobalMessageContext } from "@/features/global-message/global-message-context";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -21,171 +22,33 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 
-import { useAudioContext } from "@/features/audio/audio-ui/audio-context";
 import {
-  createTranscription,
-  getTranscription,
-} from "@/features/azure-client/speech-services";
-import {
-  CreateAudioRecord,
-  FindAllAudioRecordForCurrentUser,
-  UpdateStatusAndError,
-} from "@/features/audio/audio-services/audio-record-service";
-import {
-  createContainer,
-  uploadStream,
-} from "@/features/azure-client/storage-blob";
+  useAudioUIContext,
+  useAudioActionContext,
+} from "@/features/audio/audio-ui/audio-context";
+
 interface Prop {}
 
-export const AudioFileUploadDialog: FC<Prop> = (props) => {
-  const { showError, showSuccess } = useGlobalMessageContext();
+export const AudioFileUploadDialog: FC<Prop> = () => {
   const router = useRouter();
+  const { isOpen, setIsOpen, locale, setLocale, uploadStatus, uploadFileName } =
+    useAudioUIContext();
+  const { updateRecords, uploadFile } = useAudioActionContext();
 
-  const [isOpen, setIsOpen] = useState(false);
-  // ロケール
-  const [locale, setLocale] = useState<string>("ja-JP");
-  // ファイル名
-  const [uploadFileName, setUploadFileName] = React.useState<string>("");
-  // アップロードステータス
-  const [uploadStatus, setUploadStatus] = React.useState<string>("");
-  // userId
-  const { id } = useAudioContext();
-
-  /**
-   * ArrayBuffer to base64string
-   * @param buf ArrayBuffer
-   * @returns base64
-   */
-  const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
-    let binary = "";
-    const bytes = new Uint8Array(buffer);
-    const len = bytes.byteLength;
-    for (let i = 0; i < len; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return window.btoa(binary);
-  };
-  /**
-   * 音声ファイルアップロード
-   * @param files files
-   */
-  const uploadFile = useCallback(
-    async (files: File[]) => {
-      const userId = id;
-      const file = files[0];
-      const fileName = file.name;
-      const title = fileName.split(".").slice(0, -1).join(".") || "";
-      const fileType = fileName.split(".").pop()?.toLocaleLowerCase() || "";
-      const blobPath = `input/${userId}/${fileName}`;
-
-      setUploadFileName(fileName);
-      setUploadStatus("in progress");
-
-      const fileTypeList = ["mp3", "wav"];
-      if (!fileTypeList.includes(fileType)) {
-        console.log("File extension is invalid.");
-        setUploadStatus("faild");
-        showError("File extension must be either mp3 or wav.");
-        return null;
-      }
-      // Azure Blobにコンテナがなければ作成
-      await createContainer();
-
-      let fileReader = new FileReader();
-
-      fileReader.onload = async () => {
-        const arrayBuffer = fileReader.result;
-        if (arrayBuffer && typeof arrayBuffer !== "string") {
-          // Azure Blobに音声ファイルアップロード
-          try {
-            await uploadStream(
-              blobPath,
-              fileType,
-              arrayBufferToBase64(arrayBuffer)
-            );
-          } catch (error) {
-            console.log(`Failed to upload stream. error=${error}`);
-            setUploadStatus("failed");
-            showError("File upload failed.");
-            return;
-          }
-
-          // 文字起こしバッチ依頼
-          let transcriptionId = "";
-          try {
-            transcriptionId = await createTranscription(
-              fileName,
-              locale,
-              blobPath
-            );
-          } catch (error) {
-            console.log(`Failed to create transcription. error=${error}`);
-            setUploadStatus("failed");
-            showError("File upload failed.");
-            return;
-          }
-
-          // CosmosDBにレコード作成
-          let audioRecord;
-          try {
-            audioRecord = await CreateAudioRecord(
-              title,
-              fileName,
-              transcriptionId
-            );
-          } catch (error) {
-            console.log(`Failed to create audio record. error=${error}.`);
-            setUploadStatus("failed");
-            showError("File upload failed.");
-            return;
-          }
-
-          setUploadStatus("done");
-          showSuccess({
-            title: "File upload",
-            description: `${fileName} uploaded successfully.`,
-          });
+  useEffect(() => {
+    if (!isOpen) {
+      (async () => {
+        try {
+          await updateRecords();
+        } catch (e) {
+          console.error(e);
         }
-      };
-      fileReader.readAsArrayBuffer(file);
-    },
-    [locale]
-  );
-  const finfRecords = async () => {
-    try {
-      const records = await FindAllAudioRecordForCurrentUser();
-      await updateRecords(records);
-    } catch (e) {
-      console.error(e);
+        router.push("/audio");
+        router.refresh();
+      })();
     }
-  };
-  const updateRecords = async (records) => {
-    try {
-      for (const record of records) {
-        if (
-          record.status === "in progress" &&
-          record.transcriptionId.length > 0
-        ) {
-          const { status, error } = await getTranscription(
-            record.transcriptionId
-          );
-          if (status) {
-            if (status !== record.status || status === "failed") {
-              record.status = status;
-              record.error = error;
-              await UpdateStatusAndError(
-                record.transcriptionId,
-                record.status,
-                record.error
-              );
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
+  }, [isOpen]);
+
   const onDrop = useCallback(
     async (files: File[]) => {
       await uploadFile(files);
@@ -194,15 +57,6 @@ export const AudioFileUploadDialog: FC<Prop> = (props) => {
   );
   const { getRootProps, getInputProps } = useDropzone({ onDrop });
 
-  useEffect(() => {
-    if (!isOpen) {
-      (async () => {
-        await finfRecords();
-        router.push("/audio");
-        router.refresh();
-      })();
-    }
-  }, [isOpen]);
   return (
     <div>
       <div className="hidden h-full flex-1 flex-col space-y-3 md:flex">

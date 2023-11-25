@@ -2,45 +2,54 @@
 import "server-only";
 
 import { userHashedId, userSession } from "@/features/auth/helpers";
-import { SqlQuerySpec } from "@azure/cosmos";
+import { SqlQuerySpec, Container } from "@azure/cosmos";
 import { nanoid } from "nanoid";
 import { CosmosDBContainer } from "../../common/cosmos";
 import { AUDIO_RECORD_ATTRIBUTE, AudioRecordModel } from "./models";
-import { StatusType } from "@/features/audio/audio-services/models";
+import {
+  StatusType,
+  TRANSLATE_STATUS,
+} from "@/features/audio/audio-services/models";
+
+const getContainerAndUserId = async () => {
+  const container =
+    await CosmosDBContainer.getInstance().getSpeechToTeContainer();
+  const userId = await userHashedId();
+  return { container, userId };
+};
+
+const executeQuery = async (
+  container: Container,
+  querySpec: any,
+  partitionKey: string | undefined
+) => {
+  const { resources } = await container.items
+    .query<AudioRecordModel>(
+      querySpec,
+      partitionKey ? { partitionKey } : undefined
+    )
+    .fetchAll();
+  return resources;
+};
 
 /**
  * Find all current user
  * @returns records
  */
 export const FindAllAudioRecordForCurrentUser = async () => {
-  const container =
-    await CosmosDBContainer.getInstance().getSpeechToTeContainer();
+  const { container, userId } = await getContainerAndUserId();
 
   const querySpec: SqlQuerySpec = {
     query:
       "SELECT * FROM root r WHERE r.type=@type AND r.userId=@userId AND r.isDeleted=@isDeleted ORDER BY r.createdAt DESC",
     parameters: [
-      {
-        name: "@type",
-        value: AUDIO_RECORD_ATTRIBUTE,
-      },
-      {
-        name: "@userId",
-        value: await userHashedId(),
-      },
-      {
-        name: "@isDeleted",
-        value: false,
-      },
+      { name: "@type", value: AUDIO_RECORD_ATTRIBUTE },
+      { name: "@userId", value: userId },
+      { name: "@isDeleted", value: false },
     ],
   };
 
-  const { resources } = await container.items
-    .query<AudioRecordModel>(querySpec, {
-      partitionKey: await userHashedId(),
-    })
-    .fetchAll();
-  return resources;
+  return executeQuery(container, querySpec, userId);
 };
 
 /**
@@ -49,38 +58,20 @@ export const FindAllAudioRecordForCurrentUser = async () => {
  * @returns records
  */
 export const FindAudioRecordByID = async (id: string) => {
-  const container =
-    await CosmosDBContainer.getInstance().getSpeechToTeContainer();
-  console.log("container", container);
+  const { container, userId } = await getContainerAndUserId();
 
   const querySpec: SqlQuerySpec = {
     query:
       "SELECT * FROM root r WHERE r.type=@type AND r.userId=@userId AND r.id=@id AND r.isDeleted=@isDeleted",
     parameters: [
-      {
-        name: "@type",
-        value: AUDIO_RECORD_ATTRIBUTE,
-      },
-      {
-        name: "@userId",
-        value: await userHashedId(),
-      },
-      {
-        name: "@id",
-        value: id,
-      },
-      {
-        name: "@isDeleted",
-        value: false,
-      },
+      { name: "@type", value: AUDIO_RECORD_ATTRIBUTE },
+      { name: "@userId", value: userId },
+      { name: "@id", value: id },
+      { name: "@isDeleted", value: false },
     ],
   };
 
-  const { resources } = await container.items
-    .query<AudioRecordModel>(querySpec)
-    .fetchAll();
-
-  return resources;
+  return executeQuery(container, querySpec, undefined);
 };
 
 /**
@@ -91,37 +82,42 @@ export const FindAudioRecordByID = async (id: string) => {
 export const FindAudioRecordByTranscriptionID = async (
   transcriptionId: string
 ) => {
-  const container =
-    await CosmosDBContainer.getInstance().getSpeechToTeContainer();
+  const { container, userId } = await getContainerAndUserId();
 
   const querySpec: SqlQuerySpec = {
     query:
       "SELECT * FROM root r WHERE r.type=@type AND r.userId=@userId AND r.transcriptionId=@transcriptionId AND r.isDeleted=@isDeleted",
     parameters: [
-      {
-        name: "@type",
-        value: AUDIO_RECORD_ATTRIBUTE,
-      },
-      {
-        name: "@userId",
-        value: await userHashedId(),
-      },
-      {
-        name: "@transcriptionId",
-        value: transcriptionId,
-      },
-      {
-        name: "@isDeleted",
-        value: false,
-      },
+      { name: "@type", value: AUDIO_RECORD_ATTRIBUTE },
+      { name: "@userId", value: userId },
+      { name: "@transcriptionId", value: transcriptionId },
+      { name: "@isDeleted", value: false },
     ],
   };
 
-  const { resources } = await container.items
-    .query<AudioRecordModel>(querySpec)
-    .fetchAll();
+  return executeQuery(container, querySpec, undefined);
+};
 
-  return resources;
+/**
+ * Find by file Name
+ * @param fileName fileName
+ * @returns records
+ */
+export const FindAudioRecordByFileName = async (fileName: string) => {
+  const { container, userId } = await getContainerAndUserId();
+
+  const querySpec: SqlQuerySpec = {
+    query:
+      "SELECT * FROM root r WHERE r.type=@type AND r.userId=@userId AND r.fileName=@fileName AND r.isDeleted=@isDeleted",
+    parameters: [
+      { name: "@type", value: AUDIO_RECORD_ATTRIBUTE },
+      { name: "@userId", value: userId },
+      { name: "@fileName", value: fileName },
+      { name: "@isDeleted", value: false },
+    ],
+  };
+
+  return executeQuery(container, querySpec, undefined);
 };
 
 /**
@@ -135,26 +131,28 @@ export const CreateAudioRecord = async (
   fileName: string,
   transcriptionId: string
 ) => {
-  const container =
-    await CosmosDBContainer.getInstance().getSpeechToTeContainer();
+  const { container } = await getContainerAndUserId();
+  const [userSessionData, userId] = await Promise.all([
+    userSession(),
+    userHashedId(),
+  ]);
 
-  const modelToSave: AudioRecordModel = {
-    name: title,
-    userName: (await userSession())!.name,
-    userId: await userHashedId(),
-    id: nanoid(),
-    createdAt: new Date(),
-    isDeleted: false,
-    transcriptionId: transcriptionId,
-    status: "in progress",
-    fileName: fileName,
-    downloadLink: "",
-    error: "",
-    type: AUDIO_RECORD_ATTRIBUTE,
-  };
-  const response = await container.items.create<AudioRecordModel>(modelToSave);
-
-  return response.resource;
+  return (
+    await container.items.create({
+      name: title,
+      userName: userSessionData!.name,
+      userId,
+      id: nanoid(),
+      createdAt: new Date(),
+      isDeleted: false,
+      transcriptionId,
+      status: TRANSLATE_STATUS.IN_PROGRESS,
+      fileName,
+      downloadLink: "",
+      error: "",
+      type: AUDIO_RECORD_ATTRIBUTE,
+    })
+  ).resource;
 };
 
 /**
@@ -163,22 +161,16 @@ export const CreateAudioRecord = async (
  * @returns record
  */
 export const UpsertAudioRecord = async (model: AudioRecordModel) => {
-  const container =
-    await CosmosDBContainer.getInstance().getSpeechToTeContainer();
-  const latestModels = await FindAudioRecordByTranscriptionID(
+  const { container } = await getContainerAndUserId();
+  const [latestModel] = await FindAudioRecordByTranscriptionID(
     model.transcriptionId
   );
-  const latestModel = latestModels[0];
 
-  const updatedAudioRecord = await container.items.upsert<AudioRecordModel>(
-    latestModel
-  );
-
-  if (updatedAudioRecord === undefined) {
+  if (!latestModel) {
     throw new Error("Audio record not found");
   }
 
-  return updatedAudioRecord;
+  return await container.items.upsert(latestModel);
 };
 
 /**
@@ -191,22 +183,14 @@ export const UpdateDownloadLink = async (
   transcriptionID: string,
   downloadLink: string
 ) => {
-  const container =
-    await CosmosDBContainer.getInstance().getSpeechToTeContainer();
-  const latestModels = await FindAudioRecordByTranscriptionID(transcriptionID);
-  const latestModel = latestModels[0];
+  const { container } = await getContainerAndUserId();
+  const [latestModel] = await FindAudioRecordByTranscriptionID(transcriptionID);
 
-  latestModel.downloadLink = downloadLink;
-
-  const updatedAudioRecord = await container.items.upsert<AudioRecordModel>(
-    latestModel
-  );
-
-  if (updatedAudioRecord === undefined) {
+  if (!latestModel) {
     throw new Error("Audio record not found");
   }
 
-  return updatedAudioRecord;
+  return await container.items.upsert({ ...latestModel, downloadLink });
 };
 
 /**
@@ -221,23 +205,14 @@ export const UpdateStatusAndError = async (
   status: StatusType,
   error: string
 ) => {
-  const container =
-    await CosmosDBContainer.getInstance().getSpeechToTeContainer();
-  const latestModels = await FindAudioRecordByTranscriptionID(transcriptionID);
-  const latestModel = latestModels[0];
+  const { container } = await getContainerAndUserId();
+  const [latestModel] = await FindAudioRecordByTranscriptionID(transcriptionID);
 
-  latestModel.status = status;
-  latestModel.error = error;
-
-  const updatedAudioRecord = await container.items.upsert<AudioRecordModel>(
-    latestModel
-  );
-
-  if (updatedAudioRecord === undefined) {
+  if (!latestModel) {
     throw new Error("Audio record not found");
   }
 
-  return updatedAudioRecord;
+  return await container.items.upsert({ ...latestModel, status, error });
 };
 
 /**
@@ -245,17 +220,12 @@ export const UpdateStatusAndError = async (
  * @param id id
  */
 export const SoftDeleteAudioRecordByID = async (id: string) => {
-  const container =
-    await CosmosDBContainer.getInstance().getSpeechToTeContainer();
+  const { container } = await getContainerAndUserId();
   const records = await FindAudioRecordByID(id);
 
-  if (records.length !== 0) {
-    records.forEach(async (record) => {
-      const itemToUpdate = {
-        ...record,
-      };
-      itemToUpdate.isDeleted = true;
-      await container.items.upsert(itemToUpdate);
-    });
-  }
+  await Promise.all(
+    records.map((record) =>
+      container.items.upsert({ ...record, isDeleted: true })
+    )
+  );
 };

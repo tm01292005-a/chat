@@ -12,16 +12,12 @@ const BASE_URL = `https://${ACCOUNT_NAME}.blob.core.windows.net${SAS}`;
  */
 export const createContainer = async () => {
   const blobServiceClient = new BlobServiceClient(BASE_URL);
-
-  for await (const container of blobServiceClient.listContainers()) {
-    if (container.name === CONTAINER_NAME) {
-      return;
-    }
-  }
-
   const containerClient = blobServiceClient.getContainerClient(CONTAINER_NAME);
-  await containerClient.create();
-  console.log(`Created Azure blob container. container=${CONTAINER_NAME} .`);
+
+  await containerClient.createIfNotExists();
+  console.log(
+    `Created Azure blob container if not exists. container=${CONTAINER_NAME} .`
+  );
 };
 
 /**
@@ -86,21 +82,28 @@ export const downloadStream = async (blobPath: string) => {
   const downloadedContent = await streamToString(
     downloadResponse.readableStreamBody
   );
-  console.log(`Download Successfully: `, downloadedContent);
+  console.log(
+    `Downloaded blob from path: ${blobPath} successfully: `,
+    downloadedContent
+  );
 };
 
 async function streamToString(
   readableStream: NodeJS.ReadableStream | undefined
 ): Promise<string> {
+  if (!readableStream) {
+    return Promise.reject("No readable stream provided");
+  }
+
   return new Promise((resolve, reject) => {
     const chunks: Array<string> = [];
-    readableStream?.on("data", (data) => {
+    readableStream.on("data", (data) => {
       chunks.push(data.toString());
     });
-    readableStream?.on("end", () => {
+    readableStream.on("end", () => {
       resolve(chunks.join(""));
     });
-    readableStream?.on("error", reject);
+    readableStream.on("error", reject);
   });
 }
 
@@ -110,11 +113,6 @@ async function streamToString(
  * @returns ArrayBuffer
  */
 const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
-  const binary_string = Buffer.from(base64, "base64").toString("binary");
-  const len = binary_string.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binary_string.charCodeAt(i);
-  }
-  return bytes.buffer;
+  const buffer = Buffer.from(base64, "base64");
+  return Uint8Array.from(buffer).buffer;
 };

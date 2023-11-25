@@ -1,6 +1,23 @@
 export const AUDIO_RECORD_ATTRIBUTE = "AUDIO_RECORD";
 
-export type StatusType = "in progress" | "done" | "failed";
+/** 音声ファイルアップロードのステータス */
+export const UPLOAD_STATUS = {
+  IN_PROGRESS: "in progress",
+  FAILED: "failed",
+  DONE: "done",
+};
+
+/** 音声起こしバッチのステータス */
+export const TRANSLATE_STATUS = {
+  IN_PROGRESS: "in progress",
+  FAILED: "failed",
+  DONE: "done",
+};
+
+export type StatusType =
+  | typeof TRANSLATE_STATUS.IN_PROGRESS
+  | typeof TRANSLATE_STATUS.DONE
+  | typeof TRANSLATE_STATUS.FAILED;
 
 export interface AudioRecordModel {
   name: string; // title
