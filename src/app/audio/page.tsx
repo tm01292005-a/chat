@@ -5,8 +5,7 @@ import { AudioUI } from "@/features/audio/audio-ui/audio-ui";
 import { AudioProvider } from "@/features/audio/audio-ui/audio-context";
 import { userHashedId } from "@/features/auth/helpers";
 import { FindAllAudioRecordForCurrentUser } from "@/features/audio/audio-services/audio-record-service";
-import { AudioRecordModel } from "@/features/audio/audio-services/models";
-import { TableSchema } from "@/components/table/data/schema";
+import { transformCosmosDbDataToTableRecord } from "@/features/audio/audio-services/models";
 
 export const dynamic = "force-dynamic";
 
@@ -23,19 +22,3 @@ export default async function Home() {
     </AudioProvider>
   );
 }
-
-const transformCosmosDbDataToTableRecord = (
-  records: Array<AudioRecordModel>
-): Array<TableSchema> => {
-  return records.map((record) => {
-    return {
-      id: record.id,
-      transcriptionId: record.transcriptionId,
-      title: record.name,
-      status: record.status,
-      createdAt: new Date(record.createdAt).toLocaleString("ja-JP", {
-        timeZone: "Asia/Tokyo",
-      }),
-    };
-  });
-};

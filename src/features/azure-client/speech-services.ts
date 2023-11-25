@@ -30,7 +30,7 @@ export const createTranscription = async (
   blobPath: string
 ): Promise<string> => {
   return new Promise((resolve, reject) => {
-    const req = {
+    axios({
       baseURL: BASE_URL,
       url: `transcriptions`,
       method: "post",
@@ -55,22 +55,27 @@ export const createTranscription = async (
           `https://${BLOB_ACCOUNT_NAME}.blob.core.windows.net/${BLOB_CONTAINER_NAME}/${blobPath}`,
         ],
       },
-    };
-
-    console.info("Create transcription. req=", req);
-    axios(req)
+    })
       .then((res) => {
         if (res.status === 201) {
-          console.log(`Create transcription Successfully. res=`, res);
           const transcriptionId = getTranscriptionId(res.data.self);
+          console.log(
+            `Create transcription Successfully. transcriptionId=${transcriptionId}`
+          );
           resolve(transcriptionId);
         } else {
-          console.log(`Create transcription Faild. res=`, res);
+          console.error(
+            `Create transcription Faild. displayName=${displayName} locale=${locale} blobPath=${blobPath} res=`,
+            res
+          );
           throw new Error(res.statusText);
         }
       })
       .catch(function (error) {
-        console.log(`Create transcription Faild. error=`, error);
+        console.error(
+          `Create transcription Faild. displayName=${displayName} locale=${locale} blobPath=${blobPath} error=`,
+          error
+        );
         throw new Error(error);
       });
   });
@@ -85,29 +90,33 @@ export const getTranscription = async (
   transcriptionId: string
 ): Promise<any> => {
   return new Promise((resolve, reject) => {
-    const req = {
+    axios({
       baseURL: BASE_URL,
       url: `transcriptions/${transcriptionId}`,
       headers: { "Ocp-Apim-Subscription-Key": SPEECH_KEY },
-    };
-    console.info("Get transcription. req=", req);
-    axios(req)
+    })
       .then((res) => {
         if (res.status === 200) {
-          console.log(`Get transcription Successfully. res=`, res.data);
           const status = getStatus(res.data.status);
           let error = "";
           if (status === ("failed" as StatusType)) {
             error = res.data.properties?.error;
           }
+          console.log(
+            `Get transcription Successfully. transcriptionId=${transcriptionId} status=${status} error=${error}`
+          );
           resolve({ status, error });
         } else {
-          console.log(`Get transcription Faild. res=`, res);
+          console.error(
+            `Get transcription Faild. transcriptionId=${transcriptionId} res=${res}`
+          );
           throw new Error(res.statusText);
         }
       })
       .catch(function (error) {
-        console.log(`Get transcription Faild. error=`, error);
+        console.error(
+          `Get transcription Faild. transcriptionId=${transcriptionId} error=${error}`
+        );
         reject({});
         throw new Error(error);
       });
@@ -128,23 +137,28 @@ export const getTranscriptionFiles = async (
       url: `transcriptions/${transcriptionId}/files`,
       headers: { "Ocp-Apim-Subscription-Key": SPEECH_KEY },
     };
-    console.info("Get Transcription Files. req=", req);
     axios(req)
       .then((res) => {
         if (res.status === 200) {
-          console.log(`Get Transcription Files Successfully. res=`, res.data);
           const transcription = res.data.values.find(
             ({ kind }) => kind === "Transcription"
           );
           const downLoadLinks = transcription.links.contentUrl;
+          console.log(
+            `Get Transcription Files Successfully. transcriptionId=${transcriptionId} downLoadLinks=${downLoadLinks}`
+          );
           resolve(downLoadLinks);
         } else {
-          console.log(`Get Transcription Files Faild. res=`, res);
+          console.error(
+            `Get Transcription Files Faild. transcriptionId=${transcriptionId} res=${res}`
+          );
           throw new Error(res.statusText);
         }
       })
       .catch(function (error) {
-        console.log(`Get Transcription Files Faild. error=`, error);
+        console.error(
+          `Get Transcription Files Faild. transcriptionId=${transcriptionId} error=${error}`
+        );
         throw new Error(error);
       });
   });
@@ -159,25 +173,29 @@ export const deleteTranscription = async (
   transcriptionId: string
 ): Promise<any> => {
   return new Promise((resolve, reject) => {
-    const req = {
+    axios({
       baseURL: BASE_URL,
       url: `transcriptions/${transcriptionId}`,
       method: "delete",
       headers: { "Ocp-Apim-Subscription-Key": SPEECH_KEY },
-    };
-    console.info("Delete Transcription. req=", req);
-    axios(req)
+    })
       .then((res) => {
         if (res.status === 200 || res.status === 204) {
-          console.log(`Delete Transcription Successfully.`);
+          console.log(
+            `Delete Transcription Successfully. transcriptionId=${transcriptionId}`
+          );
           resolve(res.data);
         } else {
-          console.log(`Delete Transcription Faild. res=`, res);
+          console.error(
+            `Delete Transcription Faild. transcriptionId=${transcriptionId} res=${res}`
+          );
           throw new Error(res.statusText);
         }
       })
       .catch(function (error) {
-        console.log(`Delete Transcription Faild. error=`, error);
+        console.error(
+          `Delete Transcription Faild. transcriptionId=${transcriptionId} error=${error}`
+        );
         throw new Error(error);
       });
   });
@@ -196,18 +214,23 @@ export const downloadTranscriptionData = async (
       .get(downLoadLink)
       .then((res) => {
         if (res.status === 200) {
-          const textArray = [];
           let datas: Array<any> = res.data.combinedRecognizedPhrases;
           const text = datas[0].display; // channel0のデータを取得
-          console.log("text: ", text);
+          console.info(
+            `Download transcription data Successfully. downLoadLink=${downLoadLink}`
+          );
           resolve(text);
         } else {
-          console.log(`Download transcription data. url=", downLoadLink`);
+          console.error(
+            `Download transcription data Faild. downLoadLink=${downLoadLink} res=${res}`
+          );
           throw new Error(res.statusText);
         }
       })
       .catch(function (error) {
-        console.log(`Download transcription data. error=`, error);
+        console.error(
+          `Download transcription data Faild. downLoadLink=${downLoadLink} error=${error}`
+        );
         throw new Error(error);
       });
   });
@@ -218,9 +241,9 @@ export const downloadTranscriptionData = async (
  * @param selfUrl selfUrl
  * @returns transcription id
  */
-const getTranscriptionId = async (selfUrl: string) => {
-  const tmp = selfUrl.split("/");
-  return tmp[tmp.length - 1];
+const getTranscriptionId = (selfUrl: string) => {
+  const urlSegments = selfUrl.split("/");
+  return urlSegments[urlSegments.length - 1];
 };
 
 /**
@@ -238,7 +261,7 @@ const getStatus = (status: string): StatusType => {
     case SPEECH_TO_TEXT_SERVICE_STATUS.FAILED:
       return TRANSLATE_STATUS.FAILED as StatusType;
     default:
-      console.log(`unknown status. status=${status}`);
+      console.warn(`unknown status. status=${status}`);
       return TRANSLATE_STATUS.FAILED as StatusType;
   }
 };

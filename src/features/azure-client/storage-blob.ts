@@ -1,6 +1,6 @@
 "use server";
 
-import { BlobServiceClient } from "@azure/storage-blob";
+import { BlobServiceClient, BlobHTTPHeaders } from "@azure/storage-blob";
 
 const ACCOUNT_NAME = process.env.AZURE_BLOB_ACCOUNT_NAME || "";
 const SAS = process.env.AZURE_BLOB_SAS || "";
@@ -8,111 +8,68 @@ const CONTAINER_NAME = process.env.AZURE_BLOB_CONTAINER_NAME || "";
 const BASE_URL = `https://${ACCOUNT_NAME}.blob.core.windows.net${SAS}`;
 
 /**
- * Create Container
- */
-export const createContainer = async () => {
-  const blobServiceClient = new BlobServiceClient(BASE_URL);
-  const containerClient = blobServiceClient.getContainerClient(CONTAINER_NAME);
-
-  await containerClient.createIfNotExists();
-  console.log(
-    `Created Azure blob container if not exists. container=${CONTAINER_NAME} .`
-  );
-};
-
-/**
- * Upload Blob
+ * Upload Base64 As Blob
  * @param blobPath blobPath
  * @param fileType fileType
- * @param arrayBufferStr string
+ * @param base64 string
+ * @throws An error if the blob fails to upload.
  */
-export const uploadStream = async (
+export const uploadBase64AsBlob = async (
   blobPath: string,
   fileType: string,
-  arrayBufferBase64: string
+  base64: string
 ) => {
-  const arrayBuffer = base64ToArrayBuffer(arrayBufferBase64);
-  const blobServiceClient = new BlobServiceClient(BASE_URL);
+  try {
+    const blobServiceClient = new BlobServiceClient(BASE_URL);
+    const containerClient =
+      blobServiceClient.getContainerClient(CONTAINER_NAME);
+    const blockBlobClient = containerClient.getBlockBlobClient(blobPath);
 
-  const containerClient = blobServiceClient.getContainerClient(CONTAINER_NAME);
-  const blobClient = containerClient.getBlobClient(blobPath);
-  const blockBlobClient = blobClient.getBlockBlobClient();
+    // コンテナが存在しない場合は作成
+    await containerClient.createIfNotExists();
+    console.log(
+      `Created Azure blob container if not exists. container=${CONTAINER_NAME} .`
+    );
 
-  // SAS有効期限を設定
-  let expiresOn = new Date();
-  expiresOn.setHours(expiresOn.getHours() + 12);
+    // SAS有効期限を設定
+    let expiresOn = new Date();
+    expiresOn.setHours(expiresOn.getHours() + 12);
 
-  const blobOptions = {
-    blobHTTPHeaders: { blobContentType: `audio/${fileType}}` },
-  };
-  const view = new DataView(arrayBuffer);
-  const res = await blockBlobClient.upload(view, view.byteLength, blobOptions);
+    const buffer = Buffer.from(base64, "base64");
+    const arrayBuffer = Uint8Array.from(buffer).buffer;
+    const view = new DataView(arrayBuffer);
 
-  console.log(`Upload File Successfully: `, res);
+    const headers: BlobHTTPHeaders = {
+      blobContentType: `audio/${fileType}`,
+    };
+    await blockBlobClient.upload(view, view.byteLength, {
+      blobHTTPHeaders: headers,
+    });
+
+    console.log(`Upload Blob Successfully. blobPath=${blobPath}`);
+  } catch (error) {
+    console.log(`Upload Blob Failed. blobPath=${blobPath} error=${error}`);
+    throw error;
+  }
 };
 
 /**
  * Delete Blob
- * @param blobPath string
+ * @param blobPath - blobPath
+ * @throws If the deletion fails, an error is thrown.
  */
-
 export const deleteBlob = async (blobPath: string) => {
-  const blobServiceClient = new BlobServiceClient(BASE_URL);
-  const containerClient = blobServiceClient.getContainerClient(CONTAINER_NAME);
-  const blobClient = containerClient.getBlobClient(blobPath);
-  const blockBlobClient = blobClient.getBlockBlobClient();
-  if (await blockBlobClient.exists()) {
-    await blockBlobClient.delete();
-    console.log(`Delete Successfully: `);
+  try {
+    const blobServiceClient = new BlobServiceClient(BASE_URL);
+    const containerClient =
+      blobServiceClient.getContainerClient(CONTAINER_NAME);
+    const blockBlobClient = containerClient.getBlockBlobClient(blobPath);
+
+    await blockBlobClient.deleteIfExists();
+
+    console.log(`Deleted Blob Successfully. blobPath=${blobPath}`);
+  } catch (error) {
+    console.log(`Deleted Blob Failed. blobPath=${blobPath} error=${error}`);
+    throw error;
   }
-};
-
-/**
- * Download Blob
- * @param blobPath blobPath
- */
-export const downloadStream = async (blobPath: string) => {
-  const blobServiceClient = new BlobServiceClient(BASE_URL);
-
-  const containerClient = blobServiceClient.getContainerClient(CONTAINER_NAME);
-  const blobClient = containerClient.getBlobClient(blobPath);
-  const blockBlobClient = blobClient.getBlockBlobClient();
-
-  const downloadResponse = await blockBlobClient.download(0);
-  const downloadedContent = await streamToString(
-    downloadResponse.readableStreamBody
-  );
-  console.log(
-    `Downloaded blob from path: ${blobPath} successfully: `,
-    downloadedContent
-  );
-};
-
-async function streamToString(
-  readableStream: NodeJS.ReadableStream | undefined
-): Promise<string> {
-  if (!readableStream) {
-    return Promise.reject("No readable stream provided");
-  }
-
-  return new Promise((resolve, reject) => {
-    const chunks: Array<string> = [];
-    readableStream.on("data", (data) => {
-      chunks.push(data.toString());
-    });
-    readableStream.on("end", () => {
-      resolve(chunks.join(""));
-    });
-    readableStream.on("error", reject);
-  });
-}
-
-/**
- * base64String to ArrayBuffer
- * @param base64 base64
- * @returns ArrayBuffer
- */
-const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
-  const buffer = Buffer.from(base64, "base64");
-  return Uint8Array.from(buffer).buffer;
 };

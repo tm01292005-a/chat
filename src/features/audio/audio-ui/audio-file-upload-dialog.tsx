@@ -1,6 +1,6 @@
 "use client";
 
-import React, { FC, useCallback, useEffect } from "react";
+import React, { FC, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useDropzone } from "react-dropzone";
@@ -33,29 +33,28 @@ export const AudioFileUploadDialog: FC<Prop> = () => {
   const router = useRouter();
   const { isOpen, setIsOpen, locale, setLocale, uploadStatus, uploadFileName } =
     useAudioUIContext();
-  const { updateRecords, uploadFile } = useAudioActionContext();
+  const { updateStatus, handleOnUpload } = useAudioActionContext();
 
+  // ファイルをドロップしたら、アップロードする
+  const onDrop = useCallback(handleOnUpload, [handleOnUpload]);
+  const { getRootProps, getInputProps } = useDropzone({ onDrop });
+
+  // ダイアログが閉じたら、ステータスと画面を更新する
   useEffect(() => {
-    if (!isOpen) {
-      (async () => {
-        try {
-          await updateRecords();
-        } catch (e) {
-          console.error(e);
-        }
+    const updateAndRedirect = async () => {
+      try {
+        await updateStatus();
         router.push("/audio");
         router.refresh();
-      })();
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    if (!isOpen) {
+      updateAndRedirect();
     }
   }, [isOpen]);
-
-  const onDrop = useCallback(
-    async (files: File[]) => {
-      await uploadFile(files);
-    },
-    [uploadFile]
-  );
-  const { getRootProps, getInputProps } = useDropzone({ onDrop });
 
   return (
     <div>

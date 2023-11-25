@@ -1,3 +1,5 @@
+import { TableSchema } from "@/components/table/data/schema";
+
 export const AUDIO_RECORD_ATTRIBUTE = "AUDIO_RECORD";
 
 /** 音声ファイルアップロードのステータス */
@@ -33,3 +35,19 @@ export interface AudioRecordModel {
   error: string; // 文字起こし失敗理由
   type: "AUDIO_RECORD";
 }
+
+export const transformCosmosDbDataToTableRecord = (
+  records: Array<AudioRecordModel>
+): Array<TableSchema> => {
+  return records.map((record) => {
+    return {
+      id: record.id,
+      transcriptionId: record.transcriptionId,
+      title: record.name,
+      status: record.status,
+      createdAt: new Date(record.createdAt).toLocaleString("ja-JP", {
+        timeZone: "Asia/Tokyo",
+      }),
+    };
+  });
+};
