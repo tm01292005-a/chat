@@ -5,7 +5,7 @@ import { Table } from "@tanstack/react-table";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { statuses } from "@/components/table/columns";
+import { statuses } from "@/components/audio/columns";
 
 import { DataTableFilter } from "./data-table-filter";
 import { AudioFileUploadDialog } from "@/features/audio/audio-ui/audio-file-upload-dialog";

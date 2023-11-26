@@ -1,4 +1,4 @@
-import { TableSchema } from "@/components/table/data/schema";
+import { TableSchema } from "@/components/audio/data/schema";
 import { AudioRecordModel } from "./models";
 
 export const transformCosmosDbDataToTableRecord = (

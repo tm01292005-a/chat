@@ -2,9 +2,9 @@
 
 import React, { FC } from "react";
 
-import { columns } from "@/components/table/columns";
-import { DataTable } from "@/components/table/data-table";
-import { TableSchema } from "@/components/table/data/schema";
+import { columns } from "@/components/audio/columns";
+import { DataTable } from "@/components/audio/data-table";
+import { TableSchema } from "@/components/audio/data/schema";
 
 interface Prop {
   tableData: TableSchema[];

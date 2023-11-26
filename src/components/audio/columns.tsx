@@ -12,10 +12,10 @@ import {
 
 import { ColumnDef } from "@tanstack/react-table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { TableSchema } from "@/components/table/data/schema";
-import { DataTableColumnHeader } from "@/components/table/data-table-column-header";
-import { DataTableRowActions } from "@/components/table/data-table-row-actions";
-import { DataTableRowDownloadActions } from "@/components/table/data-table-row-download-actions";
+import { TableSchema } from "@/components/audio/data/schema";
+import { DataTableColumnHeader } from "@/components/audio/data-table-column-header";
+import { DataTableRowActions } from "@/components/audio/data-table-row-actions";
+import { DataTableRowDownloadActions } from "@/components/audio/data-table-row-download-actions";
 import { Button } from "../ui/button";
 import Link from "next/link";
 
