@@ -5,7 +5,7 @@ import { AudioUI } from "@/features/audio/audio-ui/audio-ui";
 import { AudioProvider } from "@/features/audio/audio-ui/audio-context";
 import { userHashedId } from "@/features/auth/helpers";
 import { FindAllAudioRecordForCurrentUser } from "@/features/audio/audio-services/audio-record-service";
-import { transformCosmosDbDataToTableRecord } from "@/features/audio/audio-services/models";
+import { transformCosmosDbDataToTableRecord } from "@/features/audio/audio-services/utils";
 
 export const dynamic = "force-dynamic";
 

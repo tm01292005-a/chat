@@ -26,6 +26,7 @@ import {
   useAudioUIContext,
   useAudioActionContext,
 } from "@/features/audio/audio-ui/audio-context";
+import { UPLOAD_STATUS } from "@/features/audio/audio-services/models";
 
 interface Prop {}
 
@@ -63,7 +64,11 @@ export const AudioFileUploadDialog: FC<Prop> = () => {
           <DialogTrigger asChild>
             <Button variant="outline">Import</Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px] h-90">
+          <DialogContent
+            className={`sm:max-w-[425px] h-90 ${
+              uploadStatus === UPLOAD_STATUS.IN_PROGRESS ? "opacity-50" : ""
+            }`}
+          >
             <DialogHeader>
               <DialogTitle className="h-1">Import</DialogTitle>
             </DialogHeader>
@@ -93,7 +98,7 @@ export const AudioFileUploadDialog: FC<Prop> = () => {
                   {...getRootProps()}
                   className="py-8 border-8 border-dashed flex items-center justify-center"
                 >
-                  {uploadStatus === "in progress" ? (
+                  {uploadStatus === UPLOAD_STATUS.IN_PROGRESS ? (
                     <Loader2 className="animate-spin" size={40} />
                   ) : (
                     <>

@@ -1,20 +1,20 @@
 "use server";
+import "server-only";
 
 import axios from "axios";
-import { StatusType, TRANSLATE_STATUS } from "../audio/audio-services/models";
+import { StatusType, TRANSLATE_STATUS } from "./models";
 
 const SPEECH_REGION = process.env.AZURE_SPEECH_REGION || "";
 const SPEECH_KEY = process.env.AZURE_SPEECH_KEY || "";
 const BASE_URL = `https://${SPEECH_REGION}.api.cognitive.microsoft.com/speechtotext/v3.1/`;
-
 const BLOB_ACCOUNT_NAME = process.env.AZURE_BLOB_ACCOUNT_NAME || "";
 const BLOB_CONTAINER_NAME = process.env.AZURE_BLOB_CONTAINER_NAME || "";
 
 const SPEECH_TO_TEXT_SERVICE_STATUS = {
-  NOT_START: "NotStarted", // The long running operation has not yet started.
-  RUNNING: "Running", // The long running operation is currently processing.
-  SUCCEEDED: "Succeeded", // The long running operation has successfully completed.
-  FAILED: "Failed", // The long running operation has failed.
+  NOT_START: "NotStarted",
+  RUNNING: "Running",
+  SUCCEEDED: "Succeeded",
+  FAILED: "Failed",
 };
 
 /**

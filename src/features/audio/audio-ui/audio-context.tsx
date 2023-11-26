@@ -24,11 +24,12 @@ import {
   deleteTranscription,
   getTranscription,
   createTranscription,
-} from "@/features/azure-client/speech-services";
+} from "@/features/audio/audio-services/audio-speech-services";
 import {
   uploadBase64AsBlob,
   deleteBlob,
-} from "@/features/azure-client/storage-blob";
+} from "@/features/audio/audio-services/audio-storage-service";
+import { arrayBufferToBase64 } from "@/features/audio/audio-services/utils";
 
 interface AudioUIContextProps {
   isOpen: boolean;
@@ -38,6 +39,7 @@ interface AudioUIContextProps {
   setIsOpen: (isOpen: boolean) => void;
   setLocale: (locale: string) => void;
 }
+const AudioUIContext = createContext<AudioUIContextProps | null>(null);
 
 interface AudioActionContextProps {
   id: string;
@@ -46,8 +48,6 @@ interface AudioActionContextProps {
   handleOnDelete: (row: any) => Promise<void>;
   updateStatus: () => Promise<void>;
 }
-
-const AudioUIContext = createContext<AudioUIContextProps | null>(null);
 const AudioActionContext = createContext<AudioActionContextProps | null>(null);
 
 interface Prop {
@@ -55,7 +55,6 @@ interface Prop {
   id: string;
   records: Array<AudioRecordModel>;
 }
-
 export const AudioProvider: FC<Prop> = (props) => {
   const { showError, showSuccess } = useGlobalMessageContext();
   const router = useRouter();
@@ -92,13 +91,13 @@ export const AudioProvider: FC<Prop> = (props) => {
 
         const fileReader = new FileReader();
         fileReader.onload = async () => {
-          const arrayBuffer = fileReader.result;
-          if (arrayBuffer && typeof arrayBuffer !== "string") {
+          const buf = fileReader.result;
+          if (buf && typeof buf !== "string") {
             // Azure Blobストレージにファイルをアップロード
             await uploadBase64AsBlob(
               blobPath,
               fileType,
-              arrayBufferToBase64(arrayBuffer)
+              arrayBufferToBase64(buf)
             );
             // 音声書き起こしをリクエスト
             const transcriptionId = await createTranscription(
@@ -120,7 +119,11 @@ export const AudioProvider: FC<Prop> = (props) => {
       } catch (error) {
         console.log(`Failed to upload file. error=${error}`);
         setUploadStatus(UPLOAD_STATUS.FAILED);
-        showError(`${fileName} uploaded failed.`);
+        if (error.message === "File extension must be either mp3 or wav.") {
+          showError(error.message);
+        } else {
+          showError(`${fileName} uploaded failed.`);
+        }
       }
     },
     [locale, props, showError, showSuccess]
@@ -131,19 +134,13 @@ export const AudioProvider: FC<Prop> = (props) => {
    */
   const updateStatus = async () => {
     const updateRecord = async (record) => {
-      const status = record.status;
       const transcriptionId = record.transcriptionId;
-      if (status === TRANSLATE_STATUS.IN_PROGRESS && transcriptionId) {
+      if (record.status === TRANSLATE_STATUS.IN_PROGRESS && transcriptionId) {
         // 音声書き起こし中の場合はステータスを取得してDBを更新する
-        const { status: latestStatus, error } = await getTranscription(
-          transcriptionId
-        );
-        if (
-          latestStatus &&
-          (latestStatus !== status || latestStatus === TRANSLATE_STATUS.FAILED)
-        ) {
+        const { status, error } = await getTranscription(transcriptionId);
+        if ([TRANSLATE_STATUS.DONE, TRANSLATE_STATUS.FAILED].includes(status)) {
           try {
-            await UpdateStatusAndError(transcriptionId, latestStatus, error);
+            await UpdateStatusAndError(transcriptionId, status, error);
           } catch (e) {
             console.error(
               `Update Status Faild. transcriptionId=${transcriptionId}`
@@ -157,6 +154,11 @@ export const AudioProvider: FC<Prop> = (props) => {
     await Promise.all(records.map(updateRecord));
   };
 
+  /**
+   * ダウンロード処理
+   * @param data data
+   * @param fileName fileName
+   */
   const downloadDataAsTextFile = (data: string, fileName: string) => {
     const blob = new Blob([data], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
@@ -194,7 +196,7 @@ export const AudioProvider: FC<Prop> = (props) => {
         }
         // 書き起こしデータを取得してダウンロード
         const transcriptionData = await downloadTranscriptionData(downloadLink);
-        await downloadDataAsTextFile(transcriptionData, record.name);
+        downloadDataAsTextFile(transcriptionData, record.name);
       }
     } catch (e) {
       showError("Download failed.");
@@ -282,19 +284,4 @@ export const useAudioActionContext = () => {
   }
 
   return context;
-};
-
-/**
- * ArrayBuffer to base64string
- * @param buf ArrayBuffer
- * @returns base64
- */
-const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return window.btoa(binary);
 };
