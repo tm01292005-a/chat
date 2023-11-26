@@ -1,4 +1,8 @@
-import { ContainerClient, BlobServiceClient } from "@azure/storage-blob";
+import {
+  ContainerClient,
+  BlobServiceClient,
+  StorageSharedKeyCredential,
+} from "@azure/storage-blob";
 
 export class BlobStorageContainer {
   private static instance: BlobStorageContainer;
@@ -7,10 +11,17 @@ export class BlobStorageContainer {
   private constructor() {
     const ACCOUNT_NAME = process.env.AZURE_BLOB_ACCOUNT_NAME || "";
     const CONTAINER_NAME = process.env.AZURE_BLOB_CONTAINER_NAME || "audio";
-    const SAS = process.env.AZURE_BLOB_SAS || "";
-    const BASE_URL = `https://${ACCOUNT_NAME}.blob.core.windows.net${SAS}`;
+    const ACCOUNT_KEY = process.env.AZURE_BLOB_ACCOUNT_KEY || "";
+    const BASE_URL = `https://${ACCOUNT_NAME}.blob.core.windows.net`;
 
-    const blobServiceClient = new BlobServiceClient(BASE_URL);
+    const sharedKeyCredential = new StorageSharedKeyCredential(
+      ACCOUNT_NAME,
+      ACCOUNT_KEY
+    );
+    const blobServiceClient = new BlobServiceClient(
+      BASE_URL,
+      sharedKeyCredential
+    );
     const containerClient =
       blobServiceClient.getContainerClient(CONTAINER_NAME);
 
