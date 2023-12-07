@@ -17,17 +17,20 @@ export const transformCosmosDbDataToTableRecord = (
   });
 };
 
-export const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  const len = bytes.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return window.btoa(binary);
-};
+/**
+ * ファイルをchunkSize毎に分割する
+ * @param file 分割したいファイル
+ * @param chunkSize チャンクサイズ
+ * @returns 分割したチャンク
+ */
+export const splitFile = (file: File, chunkSize: number) => {
+  const chunks = [];
+  const fileSize = file.size;
 
-export const base64ToArrayBuffer = (base64: string): ArrayBufferLike => {
-  const buffer = Buffer.from(base64, "base64");
-  return Uint8Array.from(buffer).buffer;
+  for (let offset = 0; offset < fileSize; offset += chunkSize) {
+    const chunk = file.slice(offset, offset + chunkSize);
+    chunks.push(chunk);
+  }
+
+  return chunks;
 };

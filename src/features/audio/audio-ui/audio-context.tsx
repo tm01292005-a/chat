@@ -26,10 +26,10 @@ import {
   createTranscription,
 } from "@/features/audio/audio-services/audio-speech-services";
 import {
-  uploadBase64AsBlob,
+  convertAndReuploadBlob,
   deleteBlob,
 } from "@/features/audio/audio-services/audio-storage-service";
-import { arrayBufferToBase64 } from "@/features/audio/audio-services/utils";
+import { splitFile } from "@/features/audio/audio-services/utils";
 
 interface AudioUIContextProps {
   isOpen: boolean;
@@ -64,9 +64,9 @@ export const AudioProvider: FC<Prop> = (props) => {
   // 音声書き起こしの言語
   const [locale, setLocale] = useState<string>("ja-JP");
   // アップロード中のファイル名
-  const [uploadFileName, setUploadFileName] = React.useState<string>("");
+  const [uploadFileName, setUploadFileName] = useState<string>("");
   // アップロード中のステータス
-  const [uploadStatus, setUploadStatus] = React.useState<string>("");
+  const [uploadStatus, setUploadStatus] = useState<string>("");
 
   /**
    * 音声ファイルをアップロードして、音声バッチを実行する
@@ -84,42 +84,41 @@ export const AudioProvider: FC<Prop> = (props) => {
       try {
         setUploadFileName(fileName);
         setUploadStatus(UPLOAD_STATUS.IN_PROGRESS);
+
         // ファイル形式チェック
-        if (!["mp3", "wav"].includes(fileType)) {
-          throw new Error("File extension must be either mp3 or wav.");
+        if (!["mp3", "wav", "mp4", "m4a"].includes(fileType)) {
+          throw new Error("File extension must be either mp3, wav, mp4, m4a.");
         }
 
-        const fileReader = new FileReader();
-        fileReader.onload = async () => {
-          const buf = fileReader.result;
-          if (buf && typeof buf !== "string") {
-            // Azure Blobストレージにファイルをアップロード
-            await uploadBase64AsBlob(
-              blobPath,
-              fileType,
-              arrayBufferToBase64(buf)
-            );
-            // 音声書き起こしをリクエスト
-            const transcriptionId = await createTranscription(
-              fileName,
-              locale,
-              blobPath
-            );
-            // DBにレコードを作成
-            await CreateAudioRecord(title, fileName, transcriptionId);
+        // ファイルを10MB毎に分割してAzure Blobストレージにアップロード
+        // 分割しないとブラウザがハングアップする
+        const chunks = splitFile(file, 10240 * 1024);
+        let dividedBlobPaths = await uploadChunks(chunks, blobPath, fileType);
+        dividedBlobPaths = dividedBlobPaths.sort();
 
-            setUploadStatus(UPLOAD_STATUS.DONE);
-            showSuccess({
-              title: "File upload",
-              description: `${fileName} uploaded successfully.`,
-            });
-          }
-        };
-        fileReader.readAsArrayBuffer(file);
+        // アップロードしたBlobをダウンロードして結合し、再アップロード
+        await convertAndReuploadBlob(blobPath, dividedBlobPaths, fileType);
+
+        // 音声書き起こしをリクエスト
+        const transcriptionId = await createTranscription(
+          fileName,
+          locale,
+          blobPath
+        );
+        // DBにレコードを作成
+        await CreateAudioRecord(title, fileName, transcriptionId);
+
+        setUploadStatus(UPLOAD_STATUS.DONE);
+        showSuccess({
+          title: "File upload",
+          description: `${fileName} uploaded successfully.`,
+        });
       } catch (error) {
         console.log(`Failed to upload file. error=${error}`);
         setUploadStatus(UPLOAD_STATUS.FAILED);
-        if (error.message === "File extension must be either mp3 or wav.") {
+        if (
+          error.message === "File extension must be either mp3, wav, mp4, m4a."
+        ) {
           showError(error.message);
         } else {
           showError(`${fileName} uploaded failed.`);
@@ -284,4 +283,38 @@ export const useAudioActionContext = () => {
   }
 
   return context;
+};
+
+/**
+ * 分割したファイルをサーバーサイドに送信する
+ * @param chunks 分割したファイル
+ * @param blobPath Azure Blobストレージのパス
+ * @param fileType ファイル拡張子
+ * @returns blobPaths アップロードしたファイルのパスリスト
+ */
+const uploadChunks = async (
+  chunks: any[],
+  blobPath: string,
+  fileType: string
+) => {
+  const blobPaths = chunks.map((chunk, i) => {
+    const number = `${i}`.padStart(5, "0");
+    return `${blobPath}-${number}`;
+  });
+
+  const uploads = blobPaths.map((blobPath, i) => {
+    const formData = new FormData();
+    formData.append("file", chunks[i]);
+    formData.append("blobPath", blobPath);
+    formData.append("fileType", fileType);
+
+    return fetch("/api/audio", {
+      method: "POST",
+      body: formData,
+    });
+  });
+
+  await Promise.all(uploads);
+
+  return blobPaths;
 };
