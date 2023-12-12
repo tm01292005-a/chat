@@ -4,6 +4,7 @@ import "server-only";
 import { BlobHTTPHeaders } from "@azure/storage-blob";
 import { Readable, PassThrough } from "stream";
 import ffmpeg from "fluent-ffmpeg";
+import axios from "axios";
 
 import { BlobStorageContainer } from "@/features/common/storage-blobs";
 
@@ -108,24 +109,96 @@ export const convertAndReuploadBlob = async (
 /**
  * Upload blob.
  * @param blobPath - blobPath
- * @param fileType - fileType
  * @param buf - buffer
+ * @param blockId - blockId
+ * @param blockList - blockList
+ * @param latestflag - latestflag
+ * @param chunkNumber - chunkNumber
+ *
  */
 export const uploadBlob = async (
   blobPath: string,
-  fileType: string,
+  buf: Buffer,
+  blockId: string,
+  blockList: Array<string>,
+  latestflag: boolean,
+  chunkNumber: string
+) => {
+  try {
+    const container = await BlobStorageContainer.getInstance().getContainer();
+    const blockBlobClient = container.getBlockBlobClient(blobPath);
+    await blockBlobClient.stageBlock(blockId, buf, buf.byteLength);
+
+    if (latestflag) {
+      await blockBlobClient.commitBlockList(blockList);
+      console.log(`Upload Blob Successfully. blobPath=${blobPath}`);
+    } else {
+      console.debug(
+        `Upload Blob Chunk Successfully. blobPath=${blobPath} chunk=${chunkNumber}`
+      );
+    }
+  } catch (error) {
+    console.error(
+      `Upload Blob Failed. blobPath=${blobPath} chunk=${chunkNumber} error=${error}`
+    );
+    throw error;
+  }
+};
+
+/**
+ * Upload blob.
+ * @param blobPath - blobPath
+ * @param fileType - fileType
+ * @param buf - buffer
+ */
+export const uploadBlobForMp4 = async (
+  blobPath: string,
+  // fileType: string,
   buf: Buffer
 ) => {
   try {
     const container = await BlobStorageContainer.getInstance().getContainer();
     const blockBlobClient = container.getBlockBlobClient(blobPath);
 
-    const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
-    const blobContentType =
-      fileType === "m4a" ? "audio/x-m4a" : `audio/${fileType}`;
-    const blobHTTPHeaders: BlobHTTPHeaders = { blobContentType };
-    await blockBlobClient.upload(view, view.byteLength, { blobHTTPHeaders });
+    //const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+    //const blobContentType =
+    //  fileType === "m4a" ? "audio/x-m4a" : `audio/${fileType}`;
+    //const blobHTTPHeaders: BlobHTTPHeaders = { blobContentType };
+    // await blockBlobClient.upload(view, view.byteLength, { blobHTTPHeaders });
 
+    //    await blockBlobClient.uploadStream(Readable.from(buf)); // TODO 後で戻す
+
+    ////////////////////////////////////////////////////////////////////////////////////
+
+    const chunkSize = 10 * 1024 * 1024; // 10MB
+    let newBlockList = [];
+    for (let i = 0; i < buf.length; i += chunkSize) {
+      const newBlockId = Buffer.from(crypto.randomUUID()).toString("base64");
+      const chunk = buf.slice(i, i + chunkSize);
+      await blockBlobClient.stageBlock(newBlockId, chunk, chunk.byteLength);
+      newBlockList.push(newBlockId);
+    }
+    await blockBlobClient.commitBlockList(newBlockList);
+
+    /*
+    if (formData.get("fileNumber") !== "00001") {
+      const newBlockId = Buffer.from("").toString("base64");
+
+      const blob = new Blob([new Uint8Array(buf)]);
+      await blockBlobClient.stageBlock(
+        newBlockId,
+        await blob.arrayBuffer(),
+        (
+          await blob.arrayBuffer()
+        ).byteLength
+      );
+      newBlockList.unshift(newBlockId); // TODO
+      await blockBlobClient.commitBlockList(newBlockList); // TODO
+    } else {
+      await blockBlobClient.uploadStream(Readable.from(buf));
+    }
+    */
+    ////////////////////////////////////////////////////////////////////////////////////
     console.log(`Upload Blob Successfully. blobPath=${blobPath}`);
   } catch (error) {
     console.error(`Upload Blob Failed. blobPath=${blobPath} error=${error}`);
