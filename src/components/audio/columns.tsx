@@ -47,10 +47,6 @@ export const statuses = [
     icon: XCircle,
   },
 ];
-let path = "";
-const getPath = () => {
-  return path + "aaa";
-};
 
 export const columns: ColumnDef<TableSchema>[] = [
   {
@@ -71,7 +67,7 @@ export const columns: ColumnDef<TableSchema>[] = [
         checked={row.getIsSelected()}
         onCheckedChange={(value) => row.toggleSelected(!!value)}
         aria-label="Select row"
-        className="translate-y-[2px]"
+        className="translate-y-[2px] hidden sm:block"
       />
     ),
     enableSorting: false,
@@ -82,13 +78,19 @@ export const columns: ColumnDef<TableSchema>[] = [
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Title" />
     ),
-    cell: ({ row }) => {
+    cell: ({ row, column }) => {
       return (
-        <div className="flex space-x-2">
-          <span className="max-w-[100px] lg:max-w-[500px] md:max-w-[350px] sm:max-w-[250px] truncate font-medium">
-            {row.getValue("title")}
+        <>
+          <span className="sm:hidden max-w-[100px] lg:max-w-[500px] md:max-w-[350px] sm:max-w-[250px] truncate font-medium">
+            {"Title:"}
           </span>
-        </div>
+
+          <div className="flex space-x-2">
+            <span className="max-w-[100px] lg:max-w-[500px] md:max-w-[350px] sm:max-w-[250px] truncate font-medium">
+              {row.getValue("title")}
+            </span>
+          </div>
+        </>
       );
     },
   },
@@ -112,15 +114,20 @@ export const columns: ColumnDef<TableSchema>[] = [
       }
 
       return (
-        <div className="flex w-[100px] items-center">
-          {status.icon && (
-            <status.icon
-              color={status.color}
-              className="mr-2 h-4 w-4 text-muted-foreground"
-            />
-          )}
-          <span>{status.label}</span>
-        </div>
+        <>
+          <span className="sm:hidden w-[150px] truncate font-medium">
+            {"Status:"}
+          </span>
+          <div className="flex w-[100px] items-center">
+            {status.icon && (
+              <status.icon
+                color={status.color}
+                className="mr-2 h-4 w-4 text-muted-foreground"
+              />
+            )}
+            <span>{status.label}</span>
+          </div>
+        </>
       );
     },
     filterFn: (row, id, value) => {
@@ -140,11 +147,17 @@ export const columns: ColumnDef<TableSchema>[] = [
     ),
     cell: ({ row }) => {
       return (
-        <div className="flex space-x-2">
-          <span className="max-w-[500px] truncate font-medium">
-            {row.getValue("createdAt")}
+        <>
+          <span className="sm:hidden max-w-[100px] lg:max-w-[500px] md:max-w-[350px] sm:max-w-[250px] truncate font-medium">
+            {"CreatedAt:"}
           </span>
-        </div>
+
+          <div className="flex space-x-2">
+            <span className="max-w-[500px] truncate font-medium">
+              {row.getValue("createdAt")}
+            </span>
+          </div>
+        </>
       );
     },
     filterFn: (row, id, value) => {
@@ -156,10 +169,23 @@ export const columns: ColumnDef<TableSchema>[] = [
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Download" />
     ),
-    cell: ({ row }) => <DataTableRowDownloadActions row={row} />,
+    cell: ({ row }) => {
+      return (
+        <div className="flex flex-row">
+          <DataTableRowDownloadActions row={row} />
+          <div className="sm:hidden">
+            <DataTableRowActions row={row} />
+          </div>
+        </div>
+      );
+    },
   },
   {
     id: "actions",
-    cell: ({ row }) => <DataTableRowActions row={row} />,
+    cell: ({ row }) => {
+      <div className="hidden sm:block">
+        <DataTableRowActions row={row} />
+      </div>;
+    },
   },
 ];

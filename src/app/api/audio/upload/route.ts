@@ -10,7 +10,7 @@ import { QueueContainer } from "@/features/common/queue";
 
 const audioQueue = QueueContainer.getInstance().getQueue();
 let isProcessing = false;
-let timerId = null;
+let timerId: NodeJS.Timer | null = null;
 
 const enqueueAudio = (formData: any) => {
   audioQueue.enqueue({
@@ -85,7 +85,9 @@ export async function POST(req: NextApiRequest, res: NextApiResponse) {
         }
       } else {
         console.log("送信するデータがありません");
-        clearInterval(timerId);
+        if (timerId != null) {
+          clearInterval(timerId);
+        }
         timerId = null;
       }
     };
