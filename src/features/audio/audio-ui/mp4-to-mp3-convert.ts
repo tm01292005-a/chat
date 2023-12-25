@@ -1,3 +1,8 @@
+declare global {
+  interface Window {
+    webkitAudioContext: typeof AudioContext;
+  }
+}
 /**
  * Convert MP4 to MP3
  * @param videoFileData mp4 file
@@ -17,6 +22,13 @@ export const convertMp4ToMp3 = (videoFileData: File) => {
         const sampleRate = 16000;
         const numberOfChannels = 1;
         let videoFileAsBuffer = reader.result;
+        if (
+          videoFileAsBuffer === null ||
+          typeof videoFileAsBuffer === "string"
+        ) {
+          resolve(null);
+          return;
+        }
         audioContext
           .decodeAudioData(videoFileAsBuffer)
           .then(function (decodedAudioData) {
