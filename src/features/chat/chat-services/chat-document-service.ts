@@ -249,9 +249,9 @@ export const ensureSearchIsConfigured = async () => {
     process.env.AZURE_OPENAI_API_EMBEDDINGS_DEPLOYMENT_NAME
   );
 
-  if (!isEmbeddingsConfigured) {
-    throw new Error("Azure openai embedding variables are not configured.");
-  }
+  //if (!isEmbeddingsConfigured) {
+  //  throw new Error("Azure openai embedding variables are not configured.");
+  //}
 
   const vectorStore = initAzureSearchVectorStore();
   await vectorStore.ensureIndexIsCreated();
