@@ -11,7 +11,8 @@ export const ChatMessageContainer = () => {
   const { data: session } = useSession();
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const { messages, isLoading } = useChatContext();
+  const { messages, isLoading, getId, getFeedbackStar, getFeedbackMessage } =
+    useChatContext();
 
   useChatScrollAnchor(messages, scrollRef);
 
@@ -30,6 +31,12 @@ export const ChatMessageContainer = () => {
             message={message.content}
             type={message.role}
             key={index}
+            isLoading={isLoading}
+            id={getId()}
+            index={index}
+            chatId={message.id}
+            feedbackStar={getFeedbackStar(message.id)}
+            feedbackMessage={getFeedbackMessage(message.id)}
           />
         ))}
         {isLoading && <ChatLoading />}

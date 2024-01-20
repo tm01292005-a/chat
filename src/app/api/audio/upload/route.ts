@@ -1,4 +1,4 @@
-import type { NextApiRequest, NextApiResponse } from "next";
+import type { NextApiResponse } from "next";
 import { uploadBlob } from "@/features/audio/audio-services/audio-storage-service";
 import { createTranscription } from "@/features/audio/audio-services/audio-speech-services";
 import {
@@ -6,93 +6,55 @@ import {
   UpdateStatusAndErrorBtId,
 } from "@/features/audio/audio-services/audio-record-service";
 import { TRANSLATE_STATUS } from "@/features/audio/audio-services/models";
-import { QueueContainer } from "@/features/common/queue";
 
-const audioQueue = QueueContainer.getInstance().getQueue();
-let isProcessing = false;
-let timerId: NodeJS.Timer | null = null;
-
-const enqueueAudio = (formData: any) => {
-  audioQueue.enqueue({
-    id: formData.get("id"),
-    fileNumber: formData.get("fileNumber"),
-    blobPath: formData.get("blobPath"),
-    fileName: formData.get("file").name,
-    fileType: formData.get("fileType"),
-    locale: formData.get("locale"),
-    latestflag: Boolean(parseInt(formData.get("latestflag"))),
-    createdAt: new Date(),
-  });
-};
-
-const processAudioTranscript = async (id: string) => {
-  if (isProcessing) {
-    console.log("処理中です");
-    return;
-  }
-  isProcessing = true;
-
+const processAudioTranscript = async (
+  id: string,
+  fileName: string,
+  locale: string,
+  blobPath: string
+) => {
   try {
-    const fileName = audioQueue.getFileNameById(id);
-    const locale = audioQueue.getLocaleById(id);
-    const blobPath = audioQueue.getBlobPathById(id);
-
-    // 音声書き起こしをリクエスト
     const transcriptionId = await createTranscription(
       fileName,
       locale,
       blobPath
     );
-
-    // DB更新
     await UpdateTranscriptionId(id, transcriptionId);
   } catch (error) {
-    // DBステータス更新
-    await UpdateStatusAndErrorBtId(id, TRANSLATE_STATUS.FAILED, error.message);
-  } finally {
-    // キューから削除
-    audioQueue.deleteItemsById(id);
-    isProcessing = false;
+    if (error instanceof Error) {
+      await UpdateStatusAndErrorBtId(
+        id,
+        TRANSLATE_STATUS.FAILED,
+        error.message
+      );
+    }
   }
 };
 
-export async function POST(req: NextApiRequest, res: NextApiResponse) {
+export async function POST(req: Request, res: NextApiResponse) {
   try {
-    const formData = await req.formData();
+    const formData: any = await req.formData();
 
-    try {
-      await uploadBlob(
-        formData.get("blobPath"),
-        Buffer.from(await formData.get("file").arrayBuffer()),
-        formData.get("blockId"),
-        formData.get("blockList").split(","),
-        Boolean(parseInt(formData.get("latestflag"))),
-        formData.get("fileNumber")
-      );
+    const id: string = formData.get("id");
+    const blobPath: string = formData.get("blobPath");
+    const file: Blob = formData.get("file");
+    const blockId: string = formData.get("blockId");
+    const blockList: string = formData.get("blockList");
+    const latestflag: boolean = Boolean(parseInt(formData.get("latestflag")));
+    const fileNumber: string = formData.get("fileNumber");
+    const locale: string = formData.get("locale");
 
-      enqueueAudio(formData);
-    } catch (error) {
-      console.error(error);
-      const options = { status: 500 };
-      return new Response("", options);
-    }
+    await uploadBlob(
+      blobPath,
+      Buffer.from(await file.arrayBuffer()),
+      blockId,
+      blockList.split(","),
+      latestflag,
+      fileNumber
+    );
 
-    const audioTranscript = async () => {
-      const id = audioQueue.getEarliestItemId();
-      if (id.length > 0) {
-        if (audioQueue.isSendComplete(id)) {
-          await processAudioTranscript(id);
-        }
-      } else {
-        console.log("送信するデータがありません");
-        if (timerId != null) {
-          clearInterval(timerId);
-        }
-        timerId = null;
-      }
-    };
-    if (!timerId) {
-      timerId = setInterval(audioTranscript, 10000);
+    if (latestflag) {
+      await processAudioTranscript(id, file.name, locale, blobPath);
     }
 
     const options = { status: 200 };

@@ -27,10 +27,7 @@ import {
   getTranscription,
   createTranscription,
 } from "@/features/audio/audio-services/audio-speech-services";
-import {
-  convertAndReuploadBlob,
-  deleteBlob,
-} from "@/features/audio/audio-services/audio-storage-service";
+import { deleteBlob } from "@/features/audio/audio-services/audio-storage-service";
 import { splitFile } from "@/features/audio/audio-services/utils";
 
 interface AudioUIContextProps {
@@ -100,21 +97,7 @@ export const AudioProvider: FC<Prop> = (props) => {
 
         // ファイルを10MB毎に分割してAzure Blobストレージにアップロード
         // 分割しないとブラウザがハングアップする
-        if (["mp4"].includes(fileType)) {
-          // mp4の場合はmp3に変換してからアップロード
-          const mp3 = await convertMp4ToMp3(file);
-          await uploadChunks(
-            record.id,
-            new File([mp3.blob], `${title}.mp3`, {
-              type: "audio/mp3",
-            }),
-            blobPath,
-            fileType,
-            locale
-          );
-        } else {
-          await uploadChunks(record.id, file, blobPath, fileType, locale);
-        }
+        await uploadChunks(record.id, file, blobPath, fileType, locale);
 
         setUploadStatus(UPLOAD_STATUS.DONE);
         showSuccess({
@@ -122,14 +105,17 @@ export const AudioProvider: FC<Prop> = (props) => {
           description: `${fileName} uploaded successfully.`,
         });
       } catch (error) {
-        console.log(`Failed to upload file. error=${error}`);
-        setUploadStatus(UPLOAD_STATUS.FAILED);
-        if (
-          error.message === "File extension must be either mp3, wav, mp4, m4a."
-        ) {
-          showError(error.message);
-        } else {
-          showError(`${fileName} uploaded failed.`);
+        if (error instanceof Error) {
+          console.log(`Failed to upload file. error=${error}`);
+          setUploadStatus(UPLOAD_STATUS.FAILED);
+          if (
+            error.message ===
+            "File extension must be either mp3, wav, mp4, m4a."
+          ) {
+            showError(error.message);
+          } else {
+            showError(`${fileName} uploaded failed.`);
+          }
         }
       }
     },
@@ -140,7 +126,7 @@ export const AudioProvider: FC<Prop> = (props) => {
    * Azure音声サービスのステータスを取得してDBに反映する
    */
   const updateStatus = async () => {
-    const updateRecord = async (record) => {
+    const updateRecord = async (record: AudioRecordModel) => {
       const transcriptionId = record.transcriptionId;
       if (record.status === TRANSLATE_STATUS.IN_PROGRESS && transcriptionId) {
         // 音声書き起こし中の場合はステータスを取得してDBを更新する
@@ -187,19 +173,16 @@ export const AudioProvider: FC<Prop> = (props) => {
     try {
       const [record] = await FindAudioRecordByTranscriptionID(transcriptionId);
       if (record) {
-        let downloadLink = record.downloadLink;
+        // DownloadLinkを取得
+        let downloadLink = await getTranscriptionFiles(transcriptionId);
         if (!downloadLink) {
-          // DownloadLinkを取得
-          downloadLink = await getTranscriptionFiles(transcriptionId);
-          if (!downloadLink) {
-            throw new Error("Download link could not be generated");
-          }
-          // DownloadLinkをDBに保存
-          try {
-            await UpdateDownloadLink(transcriptionId, downloadLink);
-          } catch (e) {
-            console.warn(`Failed to update download link. error=${e}`);
-          }
+          throw new Error("Download link could not be generated");
+        }
+        // DownloadLinkをDBに保存
+        try {
+          await UpdateDownloadLink(transcriptionId, downloadLink);
+        } catch (e) {
+          console.warn(`Failed to update download link. error=${e}`);
         }
         // 書き起こしデータを取得してダウンロード
         const transcriptionData = await downloadTranscriptionData(downloadLink);

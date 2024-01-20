@@ -30,6 +30,9 @@ interface ChatContextProps extends UseChatHelpers {
   onChatTypeChange: (value: ChatType) => void;
   onConversationStyleChange: (value: ConversationStyle) => void;
   speech: TextToSpeechProps & SpeechToTextProps;
+  getId: () => string;
+  getFeedbackStar: (id: string) => number | undefined;
+  getFeedbackMessage: (id: string) => string | undefined;
 }
 
 const ChatContext = createContext<ChatContextProps | null>(null);
@@ -62,6 +65,30 @@ export const ChatProvider: FC<Prop> = (props) => {
 
   const { textToSpeech } = speechSynthesizer;
   const { isMicrophoneUsed, resetMicrophoneUsed } = speechRecognizer;
+
+  const getId = (): string => {
+    return props.id;
+  };
+
+  const getFeedbackStar = (id: string): number | undefined => {
+    let chat = props.chats.filter(
+      (chat) => chat.id === id && chat.role === "assistant"
+    );
+    if (chat.length > 0) {
+      return chat[0].feedbackStar;
+    }
+    return undefined;
+  };
+
+  const getFeedbackMessage = (id: string): string | undefined => {
+    let chat = props.chats.filter(
+      (chat) => chat.id === id && chat.role === "assistant"
+    );
+    if (chat.length > 0) {
+      return chat[0].feedbackMessage;
+    }
+    return undefined;
+  };
 
   const response = useChat({
     onError,
@@ -109,6 +136,9 @@ export const ChatProvider: FC<Prop> = (props) => {
           ...speechSynthesizer,
           ...speechRecognizer,
         },
+        getId,
+        getFeedbackStar,
+        getFeedbackMessage,
       }}
     >
       {props.children}

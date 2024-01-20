@@ -49,6 +49,8 @@ export class CosmosDBChatMessageHistory extends BaseListChatMessageHistory {
       role: message instanceof AIMessage ? "assistant" : "user",
       threadId: this.sessionId,
       userId: this.userId,
+      feedbackStar: 0,
+      feedbackMessage: "",
     };
 
     await addChatMessage(modelToSave);

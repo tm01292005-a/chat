@@ -25,6 +25,12 @@ export const ChatReportingUI: FC<Props> = async (props) => {
               message={message.content}
               type={message.role}
               key={index}
+              isLoading={true}
+              id={""}
+              index={0}
+              chatId={""}
+              feedbackStar={0}
+              feedbackMessage={""}
             />
           ))}
         </div>
