@@ -14,6 +14,8 @@ export interface ChatMessageModel {
   content: string;
   role: ChatRole;
   type: "CHAT_MESSAGE";
+  feedbackStar: number;
+  feedbackMessage: string;
 }
 
 export type ConversationStyle = "creative" | "balanced" | "precise";

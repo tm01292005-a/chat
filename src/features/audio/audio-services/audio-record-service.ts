@@ -126,11 +126,7 @@ export const FindAudioRecordByFileName = async (fileName: string) => {
  * @param fileName fileName
  * @returns record
  */
-export const CreateAudioRecord = async (
-  title: string,
-  fileName: string,
-  transcriptionId: string
-) => {
+export const CreateAudioRecord = async (title: string, fileName: string) => {
   const { container } = await getContainerAndUserId();
   const [userSessionData, userId] = await Promise.all([
     userSession(),
@@ -145,7 +141,7 @@ export const CreateAudioRecord = async (
       id: nanoid(),
       createdAt: new Date(),
       isDeleted: false,
-      transcriptionId,
+      transcriptionId: "",
       status: TRANSLATE_STATUS.IN_PROGRESS,
       fileName,
       downloadLink: "",
@@ -171,6 +167,26 @@ export const UpsertAudioRecord = async (model: AudioRecordModel) => {
   }
 
   return await container.items.upsert(latestModel);
+};
+
+/**
+ * Update transcriptionID
+ * @param id id
+ * @param transcriptionID transcriptionID
+ * @returns record
+ */
+export const UpdateTranscriptionId = async (
+  id: string,
+  transcriptionId: string
+) => {
+  const { container } = await getContainerAndUserId();
+  const [latestModel] = await FindAudioRecordByID(id);
+
+  if (!latestModel) {
+    throw new Error("Audio record not found");
+  }
+
+  return await container.items.upsert({ ...latestModel, transcriptionId });
 };
 
 /**
@@ -207,6 +223,28 @@ export const UpdateStatusAndError = async (
 ) => {
   const { container } = await getContainerAndUserId();
   const [latestModel] = await FindAudioRecordByTranscriptionID(transcriptionID);
+
+  if (!latestModel) {
+    throw new Error("Audio record not found");
+  }
+
+  return await container.items.upsert({ ...latestModel, status, error });
+};
+
+/**
+ * Update status and error
+ * @param id id
+ * @param status status
+ * @param error error
+ * @returns record
+ */
+export const UpdateStatusAndErrorBtId = async (
+  id: string,
+  status: StatusType,
+  error: string
+) => {
+  const { container } = await getContainerAndUserId();
+  const [latestModel] = await FindAudioRecordByID(id);
 
   if (!latestModel) {
     throw new Error("Audio record not found");
