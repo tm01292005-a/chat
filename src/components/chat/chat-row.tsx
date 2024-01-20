@@ -2,8 +2,8 @@
 import { ChatRole } from "@/features/chat/chat-services/models";
 import { isNotNullOrEmpty } from "@/features/chat/chat-services/utils";
 import { cn } from "@/lib/utils";
-import { CheckIcon, ClipboardIcon, UserCircle } from "lucide-react";
-import { FC, useState } from "react";
+import { CheckIcon, ClipboardIcon, UserCircle, Star } from "lucide-react";
+import { FC, useEffect, useState } from "react";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import Typography from "../typography";
@@ -11,15 +11,42 @@ import { Avatar, AvatarImage } from "../ui/avatar";
 import { Button } from "../ui/button";
 import { CodeBlock } from "./code-block";
 import { MemoizedReactMarkdown } from "./memoized-react-markdown";
+import {
+  FindAllChats,
+  UpdateChat,
+  FindChatById,
+} from "@/features/chat/chat-services/chat-service";
+import { ChatMessageModel } from "@/features/chat/chat-services/models";
+
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface ChatRowProps {
   name: string;
   profilePicture: string;
   message: string;
   type: ChatRole;
+  isLoading: boolean;
+  id: string;
+  index: number;
+  chatId: string;
+  feedbackStar: number | undefined;
+  feedbackMessage: string | undefined;
 }
 
 const ChatRow: FC<ChatRowProps> = (props) => {
+  const [rating, setRating] = useState(props.feedbackStar);
+  const [hover, setHover] = useState(0);
+  const [feedbackMessage, setFeedbackMessage] = useState(props.feedbackMessage);
+  const [openPopover, setOpenPopover] = useState<number | null>(null);
+  const [canShowPopover, setCanShowPopover] = useState(true);
+  const [hasStarClicked, setHasStarClicked] = useState(false);
+
   const [isIconChecked, setIsIconChecked] = useState(false);
   const toggleIcon = () => {
     setIsIconChecked((prevState) => !prevState);
@@ -28,6 +55,67 @@ const ChatRow: FC<ChatRowProps> = (props) => {
   const handleButtonClick = () => {
     toggleIcon();
     navigator.clipboard.writeText(props.message);
+  };
+
+  const loadAndUpsertChat = async () => {
+    let chat;
+    const chats = await FindChatById(props.chatId);
+    if (chats.length === 0) {
+      const allChats = await FindAllChats(props.id);
+      chat = allChats[props.index];
+    } else {
+      chat = chats[0];
+    }
+    if (chat) {
+      setFeedbackMessage(chat.feedbackMessage);
+      setRating(chat.feedbackStar);
+    }
+  };
+
+  if (rating === undefined && props.type === "assistant") {
+    (async () => {
+      await loadAndUpsertChat();
+    })();
+  }
+
+  const handleStarClick = async (ratingValue: number) => {
+    if (hasStarClicked) {
+      return;
+    }
+    setHasStarClicked(true);
+    const loadAndUpsertChat = async () => {
+      let chat;
+      const chats = await FindChatById(props.chatId);
+      if (chats.length === 0) {
+        const allChats = await FindAllChats(props.id);
+        chat = allChats[props.index];
+      } else {
+        chat = chats[0];
+      }
+      chat.feedbackStar = ratingValue;
+      await UpdateChat(chat);
+      setRating(ratingValue);
+    };
+    await loadAndUpsertChat();
+  };
+
+  const handleClick = async () => {
+    const loadAndUpsertChat = async () => {
+      let chat;
+      const chats = await FindChatById(props.chatId);
+      if (chats.length === 0) {
+        const allChats = await FindAllChats(props.id);
+        chat = allChats[props.index];
+      } else {
+        chat = chats[0];
+      }
+      chat.feedbackMessage = feedbackMessage || "";
+      await UpdateChat(chat);
+      setFeedbackMessage(feedbackMessage);
+    };
+    await loadAndUpsertChat();
+    setOpenPopover(null);
+    setCanShowPopover(false);
   };
 
   return (
@@ -133,6 +221,114 @@ const ChatRow: FC<ChatRowProps> = (props) => {
           ) : (
             props.message
           )}
+        </div>
+        <div style={{ display: "flex" }}>
+          {props.type === "assistant" &&
+            [...Array(5)].map((star, i) => {
+              const ratingValue = i + 1;
+
+              return (
+                <Popover
+                  key={i}
+                  open={openPopover === i && canShowPopover}
+                  onOpenChange={() =>
+                    setOpenPopover(openPopover === i ? null : i)
+                  }
+                  modal={false}
+                >
+                  {(feedbackMessage === undefined ||
+                    feedbackMessage.length !== 0) && (
+                    <label key={i}>
+                      <input
+                        disabled={rating !== 0}
+                        type="radio"
+                        name="rating"
+                        onClick={async (event) => {
+                          event.stopPropagation();
+                          if (hasStarClicked) {
+                            return;
+                          }
+                          await handleStarClick(ratingValue);
+                          const newPopoverState = openPopover === i ? null : i;
+                          setOpenPopover(newPopoverState);
+                        }}
+                        style={{ display: "none" }}
+                      />
+                      <Star
+                        className="star"
+                        color={
+                          ratingValue <= (hover ?? rating ?? 0)
+                            ? "#ffc107"
+                            : "#e4e5e9"
+                        }
+                        size={20}
+                      />
+                    </label>
+                  )}
+                  {feedbackMessage?.length === 0 && (
+                    <PopoverTrigger>
+                      <label key={i}>
+                        <input
+                          disabled={rating !== 0}
+                          type="radio"
+                          name="rating"
+                          onClick={async (event) => {
+                            event.stopPropagation();
+                            if (hasStarClicked) {
+                              return;
+                            }
+                            await handleStarClick(ratingValue);
+                            const newPopoverState =
+                              openPopover === i ? null : i;
+                            setOpenPopover(newPopoverState);
+                          }}
+                          style={{ display: "none" }}
+                        />
+                        <Star
+                          className="star"
+                          color={
+                            ratingValue <= (hover ?? rating ?? 0)
+                              ? "#ffc107"
+                              : "#e4e5e9"
+                          }
+                          size={20}
+                        />
+                      </label>
+                    </PopoverTrigger>
+                  )}
+
+                  <PopoverContent className="w-80">
+                    <div className="grid gap-4">
+                      <div className="space-y-2">
+                        <h4 className="font-medium leading-none">Dimensions</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Set the dimensions for the layer.
+                        </p>
+                      </div>
+                      <div className="grid gap-2">
+                        <div className="grid grid-cols-3 items-center gap-4">
+                          <Input
+                            id="maxHeight"
+                            value={feedbackMessage}
+                            onChange={(e) => setFeedbackMessage(e.target.value)}
+                            className="col-span-2 h-8"
+                          />
+                        </div>
+                        <div className="grid grid-cols-3 items-center gap-4">
+                          <Button
+                            onClick={async () => {
+                              await handleClick();
+                            }}
+                          >
+                            Send
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              );
+            })}
         </div>
       </div>
     </div>

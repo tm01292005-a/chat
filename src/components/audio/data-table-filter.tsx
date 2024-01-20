@@ -114,7 +114,7 @@ export function DataTableFilter<TData, TValue>({
                     </div>
                     {option.icon && (
                       <option.icon
-                        color={option.color}
+                        // color={option.color}
                         className="mr-2 h-4 w-4 text-muted-foreground"
                       />
                     )}

@@ -59,13 +59,14 @@ export const AudioFileUploadDialog: FC<Prop> = () => {
 
   return (
     <div>
-      <div className="hidden h-full flex-1 flex-col space-y-3 md:flex">
+      <div className="h-full flex-1 flex-col space-y-3 flex">
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger asChild>
             <Button variant="outline">Import</Button>
           </DialogTrigger>
           <DialogContent
-            className={`sm:max-w-[425px] h-90 ${
+            className={`max-w-[300px] sm:max-w-[425px] h-[500px] md:h-90 ${
+              //              className={`sm:max-w-[425px] h-90 ${
               uploadStatus === UPLOAD_STATUS.IN_PROGRESS ? "opacity-50" : ""
             }`}
           >

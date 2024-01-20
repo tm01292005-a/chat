@@ -16,7 +16,7 @@ export default async function Home() {
 
   return (
     <AudioProvider id={userId} records={records}>
-      <Card className="h-full items-center flex justify-center flex-1">
+      <Card className="h-full items-center flex justify-center flex-1 overflow-x-auto overflow-y-auto">
         <AudioUI tableData={tableData} />
       </Card>
     </AudioProvider>

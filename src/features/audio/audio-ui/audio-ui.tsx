@@ -12,7 +12,7 @@ interface Prop {
 
 export const AudioUI: FC<Prop> = (props) => {
   return (
-    <div className="">
+    <div className="h-full w-full">
       <h2 className="text-2xl font-bold tracking-tight">音声変換</h2>
       <DataTable data={props.tableData} columns={columns} />
     </div>

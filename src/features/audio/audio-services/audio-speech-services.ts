@@ -141,7 +141,7 @@ export const getTranscriptionFiles = async (
       .then((res) => {
         if (res.status === 200) {
           const transcription = res.data.values.find(
-            ({ kind }) => kind === "Transcription"
+            ({ kind }: { kind: string }) => kind === "Transcription"
           );
           const downLoadLinks = transcription.links.contentUrl;
           console.log(
