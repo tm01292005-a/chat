@@ -9,7 +9,11 @@ import {
 } from "@azure/ai-form-recognizer";
 import { SqlQuerySpec } from "@azure/cosmos";
 import { Document } from "langchain/document";
-import { OpenAIEmbeddings } from "langchain/embeddings/openai";
+import { OpenAIEmbeddings } from "@langchain/openai";
+import { DocxLoader } from "langchain/document_loaders/fs/docx";
+import { PPTXLoader } from "langchain/document_loaders/fs/pptx";
+import { PDFLoader } from "langchain/document_loaders/fs/pdf";
+import { UnstructuredLoader } from "langchain/document_loaders/fs/unstructured";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { nanoid } from "nanoid";
 import {
@@ -19,6 +23,13 @@ import {
   ServerActionResponse,
 } from "./models";
 import { isNotNullOrEmpty } from "./utils";
+import { exec } from "child_process";
+//import DocumentIntelligence from "@azure-rest/ai-document-intelligence";
+import DocumentIntelligence, {
+  getLongRunningPoller,
+  AnalyzeResultOperationOutput,
+  isUnexpected,
+} from "@azure-rest/ai-document-intelligence";
 
 const MAX_DOCUMENT_SIZE = 20000000;
 
@@ -46,21 +57,126 @@ export const UploadDocument = async (
   }
 };
 
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  let binary = "";
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
 const LoadFile = async (formData: FormData) => {
   try {
     const file: File | null = formData.get("file") as unknown as File;
 
+    const blob = new Blob([file], { type: file.type });
+    /*
+    const docxLoader: DocxLoader = new DocxLoader(blob);
+    const docxDocs = await docxLoader.loadAndSplit(
+      new RecursiveCharacterTextSplitter({
+        chunkSize: 1024,
+        chunkOverlap: 256,
+      })
+    );
+    console.log("docxDocs", docxDocs);
+    */
+    /*
+    const pptxLoader: PPTXLoader = new PPTXLoader(blob);
+    const pptxDocs = await pptxLoader.loadAndSplit(
+      new RecursiveCharacterTextSplitter({
+        chunkSize: 1024,
+        chunkOverlap: 256,
+      })
+    );
+    console.log("pptxDocs", pptxDocs);
+    */
+    /*
+    const pdfLoader: PDFLoader = new PDFLoader(blob);
+    const pdfDocs = await pdfLoader.loadAndSplit(
+      new RecursiveCharacterTextSplitter({
+        chunkSize: 1024,
+        chunkOverlap: 256,
+      })
+    );
+    console.log("pdfDocs", pdfDocs);
+    */
+
+    /*
+    exec("python test.py", (error, stdout, stderr) => {
+      if (error) {
+        console.error(`exec error: ${error}`);
+        return;
+      }
+      console.log(`stdout: ${stdout}`);
+      console.error(`stderr: ${stderr}`);
+    });
+    */
+
     if (file && file.size < MAX_DOCUMENT_SIZE) {
       const client = initDocumentIntelligence();
 
-      const blob = new Blob([file], { type: file.type });
+      //const blob = new Blob([file], { type: file.type });
 
+      const buffer = await file.arrayBuffer();
+      const base64Source = arrayBufferToBase64(buffer);
+      const initialResponse = await client
+        .path("/documentModels/{modelId}:analyze", "prebuilt-layout")
+        .post({
+          contentType: "application/json",
+          body: {
+            base64Source,
+          },
+          queryParameters: {
+            //locale: "en-IN",
+            locale: "ja-JP",
+            split: "perPage",
+          },
+        });
+      if (isUnexpected(initialResponse)) {
+        throw initialResponse.body.error;
+      }
+      const poller = await getLongRunningPoller(client, initialResponse);
+      const result = (await poller.pollUntilDone())
+        .body as AnalyzeResultOperationOutput;
+
+      const analyzeResult = (
+        (await (await poller).pollUntilDone())
+          .body as AnalyzeResultOperationOutput
+      ).analyzeResult;
+
+      const pages = analyzeResult?.pages;
+      if (!pages || pages.length <= 0) {
+        throw new Error("Expecting non-empty pages array");
+      }
+      for (const page of pages) {
+        console.log("- Page", page.pageNumber, `(unit: ${page.unit})`);
+        console.log(`  ${page.width}x${page.height}, angle: ${page.angle}`);
+        console.log(
+          `  ${page.lines && page.lines.length} lines, ${
+            page.words && page.words.length
+          } words`
+        );
+
+        if (page.lines && page.lines.length > 0) {
+          console.log("  Lines:");
+
+          for (const line of page.lines) {
+            console.log(`  - "${line.content}"`);
+          }
+        }
+      }
+
+      const paragraphs = result.analyzeResult?.paragraphs;
+
+      /*
       const poller = await client.beginAnalyzeDocument(
         "prebuilt-read",
         await blob.arrayBuffer()
       );
       const { paragraphs } = await poller.pollUntilDone();
-
+*/
       const docs: Document[] = [];
 
       if (paragraphs) {
@@ -96,7 +212,10 @@ const LoadFile = async (formData: FormData) => {
 
 const SplitDocuments = async (docs: Array<Document>) => {
   const allContent = docs.map((doc) => doc.pageContent).join("\n");
-  const splitter = new RecursiveCharacterTextSplitter();
+  const splitter = new RecursiveCharacterTextSplitter({
+    chunkSize: 1024,
+    chunkOverlap: 256,
+  });
   const output = await splitter.createDocuments([allContent]);
   return output;
 };
@@ -132,6 +251,7 @@ export const IndexDocuments = async (
         pageContent: doc,
         metadata: fileName,
         embedding: [],
+        fileName: `${fileName}-${index}`,
       };
 
       documentsToIndex.push(docToAdd);
@@ -169,11 +289,19 @@ export const initAzureSearchVectorStore = () => {
 };
 
 export const initDocumentIntelligence = () => {
+  const client = DocumentIntelligence(
+    process.env.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT,
+    new AzureKeyCredential(process.env.AZURE_DOCUMENT_INTELLIGENCE_KEY),
+    {
+      apiVersion: "2023-10-31-preview",
+    }
+  );
+  /*
   const client = new DocumentAnalysisClient(
     process.env.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT,
     new AzureKeyCredential(process.env.AZURE_DOCUMENT_INTELLIGENCE_KEY)
   );
-
+*/
   return client;
 };
 

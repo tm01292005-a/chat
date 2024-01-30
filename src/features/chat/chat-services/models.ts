@@ -55,6 +55,7 @@ export interface FaqDocumentIndex extends AzureCogDocument {
   embedding: number[];
   pageContent: string;
   metadata: any;
+  fileName: string;
 }
 
 export interface ChatDocumentModel {

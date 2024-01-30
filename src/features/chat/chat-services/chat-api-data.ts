@@ -3,7 +3,7 @@ import { CosmosDBChatMessageHistory } from "@/features/langchain/memory/cosmosdb
 import { LangChainStream, StreamingTextResponse } from "ai";
 import { loadQAMapReduceChain } from "langchain/chains";
 import { ChatOpenAI } from "langchain/chat_models/openai";
-import { OpenAIEmbeddings } from "langchain/embeddings/openai";
+import { OpenAIEmbeddings } from "@langchain/openai";
 import { BufferWindowMemory } from "langchain/memory";
 import {
   ChatPromptTemplate,
@@ -15,6 +15,7 @@ import { insertPromptAndResponse } from "./chat-service";
 import { initAndGuardChatSession } from "./chat-thread-service";
 import { FaqDocumentIndex, PromptGPTProps } from "./models";
 import { transformConversationStyleToTemperature } from "./utils";
+import { ConversationChain } from "langchain/chains";
 
 export const ChatAPIData = async (props: PromptGPTProps) => {
   const { lastHumanMessage, id, chatThread } = await initAndGuardChatSession(
@@ -25,7 +26,7 @@ export const ChatAPIData = async (props: PromptGPTProps) => {
     temperature: transformConversationStyleToTemperature(
       chatThread.conversationStyle
     ),
-    streaming: true,
+    streaming: false,
   });
 
   const relevantDocuments = await findRelevantDocuments(
@@ -55,14 +56,33 @@ export const ChatAPIData = async (props: PromptGPTProps) => {
     }),
   });
 
-  chain.call(
+  const ret = await chain.call(
     {
       input_documents: relevantDocuments,
       question: lastHumanMessage.content,
       memory: memory,
-    },
-    [handlers]
+    }
+    //    [handlers]
   );
+  const content = ret.text;
+
+  console.log("content", content);
+  const outputChatModel = new ChatOpenAI({
+    temperature: 0,
+    streaming: true,
+  });
+  const chatPrompt = ChatPromptTemplate.fromPromptMessages([
+    SystemMessagePromptTemplate.fromTemplate(`そのまま返してください。`),
+    HumanMessagePromptTemplate.fromTemplate("{input}"),
+  ]);
+
+  const outputChain = new ConversationChain({
+    llm: outputChatModel,
+    memory,
+    prompt: chatPrompt,
+  });
+
+  outputChain.call({ input: content }, [handlers]);
 
   return new StreamingTextResponse(stream);
 };
@@ -73,6 +93,7 @@ const findRelevantDocuments = async (query: string, chatThreadId: string) => {
   const relevantDocuments = await vectorStore.similaritySearch(query, 10, {
     vectorFields: vectorStore.config.vectorFieldName,
     filter: `user eq '${await userHashedId()}' and chatThreadId eq '${chatThreadId}'`,
+    //filter: `user eq '${await userHashedId()}'`,
   });
 
   return relevantDocuments;

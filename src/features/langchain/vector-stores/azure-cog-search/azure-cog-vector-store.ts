@@ -1,7 +1,7 @@
 import { Callbacks } from "langchain/callbacks";
 import { Document } from "langchain/document";
 import { Embeddings } from "langchain/embeddings/base";
-import { VectorStore } from "langchain/vectorstores/base";
+import { VectorStore } from "@langchain/core/vectorstores";
 import { nanoid } from "nanoid";
 
 // example index model below
