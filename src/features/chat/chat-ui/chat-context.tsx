@@ -33,6 +33,8 @@ interface ChatContextProps extends UseChatHelpers {
   getId: () => string;
   getFeedbackStar: (id: string) => number | undefined;
   getFeedbackMessage: (id: string) => string | undefined;
+  selectedFile: string[];
+  setSelectedFile: (value: string[]) => void;
 }
 
 const ChatContext = createContext<ChatContextProps | null>(null);
@@ -55,6 +57,8 @@ export const ChatProvider: FC<Prop> = (props) => {
   });
 
   const fileState = useFileState();
+
+  const [selectedFile, setSelectedFile] = useState<string[]>([]);
 
   const [chatBody, setBody] = useState<PromptGPTBody>({
     id: props.chatThread.id,
@@ -139,6 +143,8 @@ export const ChatProvider: FC<Prop> = (props) => {
         getId,
         getFeedbackStar,
         getFeedbackMessage,
+        selectedFile,
+        setSelectedFile,
       }}
     >
       {props.children}

@@ -384,3 +384,18 @@ export const ensureSearchIsConfigured = async () => {
   const vectorStore = initAzureSearchVectorStore();
   await vectorStore.ensureIndexIsCreated();
 };
+
+export const findRelevantDocument = async (docId: string): Promise<string> => {
+  const vectorStore = initAzureSearchVectorStore();
+
+  const relevantDocuments = await vectorStore.similaritySearch("", 5, {
+    vectorFields: vectorStore.config.vectorFieldName,
+    filter: `id eq '${docId}'`,
+  });
+  const relevantDocumentsContent = relevantDocuments.map((doc) => {
+    return doc.pageContent;
+  });
+  console.log("relevantDocumentsContent", relevantDocumentsContent);
+
+  return relevantDocumentsContent[0];
+};

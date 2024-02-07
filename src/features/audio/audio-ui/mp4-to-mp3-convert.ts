@@ -3,19 +3,24 @@ declare global {
     webkitAudioContext: typeof AudioContext;
   }
 }
+
+export type ConvertedAudio = {
+  blob: Blob;
+};
+
 /**
  * Convert MP4 to MP3
  * @param videoFileData mp4 file
  * @returns
  * https://github.com/suvro404/video-to-audio/blob/main/index.js
  */
-export const convertMp4ToMp3 = (videoFileData: File) => {
+export const convertMp4ToMp3 = (
+  videoFileData: File
+): Promise<Blob | undefined> => {
   try {
-    const targetAudioFormat = "mp3";
     let reader = new FileReader();
     return new Promise((resolve) => {
       reader.onload = function (event) {
-        let contentType = "audio/" + targetAudioFormat;
         let audioContext = new (window.AudioContext ||
           window.webkitAudioContext)();
         let myBuffer;
@@ -26,8 +31,8 @@ export const convertMp4ToMp3 = (videoFileData: File) => {
           videoFileAsBuffer === null ||
           typeof videoFileAsBuffer === "string"
         ) {
-          resolve(null);
-          return;
+          resolve(undefined);
+          return Promise.resolve(undefined);
         }
         audioContext
           .decodeAudioData(videoFileAsBuffer)
@@ -45,25 +50,13 @@ export const convertMp4ToMp3 = (videoFileData: File) => {
             soundSource.start();
             offlineAudioContext
               .startRendering()
-              .then(function (renderedBuffer) {
-                let UintWave = createWaveFileData(renderedBuffer);
-                let b64Data = btoa(uint8ToString(UintWave));
-                console.log("DEBUG6");
-                let blob = getBlobFromBase64Data(b64Data, contentType);
-                console.log("DEBUG7");
-                let blobUrl = URL.createObjectURL(blob);
-                console.log("DEBUG8");
-
-                let convertedAudio = {
-                  name: videoFileData.name.substring(
-                    0,
-                    videoFileData.name.lastIndexOf(".")
-                  ),
-                  format: targetAudioFormat,
-                  data: blobUrl,
-                  blob: blob,
-                };
-                resolve(convertedAudio);
+              .then((renderedBuffer) => {
+                resolve(
+                  getBlobFromBase64Data(
+                    btoa(uint8ToString(createWaveFileData(renderedBuffer))),
+                    "audio/mp3"
+                  )
+                );
               })
               .catch(function (err) {
                 console.log("Rendering failed: " + err);
@@ -74,6 +67,7 @@ export const convertMp4ToMp3 = (videoFileData: File) => {
     });
   } catch (e) {
     console.log("Error occurred while converting : ", e);
+    return Promise.resolve(undefined);
   }
 };
 

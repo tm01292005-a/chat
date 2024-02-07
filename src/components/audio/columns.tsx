@@ -18,6 +18,7 @@ import { DataTableRowActions } from "@/components/audio/data-table-row-actions";
 import { DataTableRowDownloadActions } from "@/components/audio/data-table-row-download-actions";
 import { Button } from "../ui/button";
 import Link from "next/link";
+import { DataTableColumnValue } from "./data-table-column-value";
 
 /**
  * ステータス
@@ -63,12 +64,20 @@ export const columns: ColumnDef<TableSchema>[] = [
       />
     ),
     cell: ({ row }) => (
-      <Checkbox
-        checked={row.getIsSelected()}
-        onCheckedChange={(value) => row.toggleSelected(!!value)}
-        aria-label="Select row"
-        className="translate-y-[2px] hidden sm:block"
-      />
+      <>
+        <DataTableColumnValue row={row} />
+        {/*
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(value) => {
+            row.toggleSelected(!!value);
+            console.log(row.original.title);
+          }}
+          aria-label="Select row"
+          className="translate-y-[2px] hidden sm:block"
+        />
+        */}
+      </>
     ),
     enableSorting: false,
     enableHiding: false,

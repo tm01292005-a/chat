@@ -24,7 +24,21 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
+import { DataTableDemo } from "@/components/chat/demo";
+import { useChatContext } from "@/features/chat/chat-ui/chat-context";
 import { Label } from "@/components/ui/label";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+  SheetFooter,
+  SheetClose,
+} from "@/components/ui/sheet";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { findRelevantDocument } from "@/features/chat/chat-services/chat-document-service";
 
 interface ChatRowProps {
   name: string;
@@ -40,6 +54,8 @@ interface ChatRowProps {
 }
 
 const ChatRow: FC<ChatRowProps> = (props) => {
+  const { selectedFile } = useChatContext();
+
   const [rating, setRating] = useState(props.feedbackStar);
   const [hover, setHover] = useState(0);
   const [feedbackMessage, setFeedbackMessage] = useState(props.feedbackMessage);
@@ -118,6 +134,54 @@ const ChatRow: FC<ChatRowProps> = (props) => {
     setCanShowPopover(false);
   };
 
+  //  console.log("selectedFile=", selectedFile);
+
+  const PComponent = ({ children }) => {
+    const docId = "MjtlxYnpOgQf96cIsohGM";
+    const [quoteContext, setQuoteContext] = useState("");
+
+    useEffect(() => {
+      const fetchQuoteContext = async () => {
+        const result = await findRelevantDocument(docId);
+        setQuoteContext(result);
+      };
+
+      fetchQuoteContext();
+    }, [docId]);
+
+    return (
+      <>
+        <p className="mb-2 last:mb-0">{children}</p>
+        <div className="grid grid-cols-2 gap-2">
+          <Sheet key={"bottom"}>
+            <SheetTrigger asChild>
+              <Button variant="outline">{"bottom"}</Button>
+            </SheetTrigger>
+            <SheetContent side={"bottom"}>
+              <SheetHeader>
+                <SheetDescription>引用</SheetDescription>
+              </SheetHeader>
+              <div className="grid gap-4 py-4">
+                <ScrollArea className="h-72 w-48 rounded-md border">
+                  <div className="p-4">
+                    <div className="text-sm">{quoteContext}</div>
+                  </div>
+                </ScrollArea>
+                <div className="grid grid-cols-4 items-center gap-4"></div>
+                <div className="grid grid-cols-4 items-center gap-4"></div>
+              </div>
+              <SheetFooter>
+                <SheetClose asChild>
+                  <Button type="submit">Save changes</Button>
+                </SheetClose>
+              </SheetFooter>
+            </SheetContent>
+          </Sheet>
+        </div>
+      </>
+    );
+  };
+
   return (
     <div
       className={cn(
@@ -133,6 +197,7 @@ const ChatRow: FC<ChatRowProps> = (props) => {
         <div className="flex flex-1">
           <div className="flex gap-4 items-center flex-1">
             <div className="">
+              {/*<DataTableDemo />*/}
               {isNotNullOrEmpty(props.profilePicture) ? (
                 <Avatar>
                   <AvatarImage src={props.profilePicture} />
@@ -179,9 +244,7 @@ const ChatRow: FC<ChatRowProps> = (props) => {
               className="prose prose-slate dark:prose-invert break-words prose-p:leading-relaxed prose-pre:p-0 max-w-none"
               remarkPlugins={[remarkGfm, remarkMath]}
               components={{
-                p({ children }) {
-                  return <p className="mb-2 last:mb-0">{children}</p>;
-                },
+                p: PComponent,
                 code({ node, inline, className, children, ...props }) {
                   if (children.length) {
                     if (children[0] == "▍") {

@@ -17,15 +17,18 @@ import { FaqDocumentIndex, PromptGPTProps } from "./models";
 import { transformConversationStyleToTemperature } from "./utils";
 import { ConversationChain } from "langchain/chains";
 
-export const ChatAPIData = async (props: PromptGPTProps) => {
+export const ChatAPIData3 = async (props: PromptGPTProps) => {
   const { lastHumanMessage, id, chatThread } = await initAndGuardChatSession(
     props
   );
 
   const chatModel = new ChatOpenAI({
-    temperature: transformConversationStyleToTemperature(
-      chatThread.conversationStyle
-    ),
+    temperature: 0,
+    streaming: false,
+    verbose: true,
+  });
+  const chatModel2 = new ChatOpenAI({
+    temperature: 0,
     streaming: true,
     verbose: true,
   });
@@ -39,8 +42,18 @@ export const ChatAPIData = async (props: PromptGPTProps) => {
   });
 
   // AIが回答を生成する際に、どのドキュメントが使用されたかを追跡
+  const chatPrompt = ChatPromptTemplate.fromPromptMessages([
+    SystemMessagePromptTemplate.fromTemplate(
+      `Write a summary of the following in 1-2 sentences. Please leave QUOTE_ID.`
+    ),
+    //HumanMessagePromptTemplate.fromTemplate("{question}"),
+    HumanMessagePromptTemplate.fromTemplate("{context}"),
+  ]);
+
   const chain = loadQAMapReduceChain(chatModel, {
     combinePrompt: defineSystemPrompt(),
+    combineMapPrompt: chatPrompt,
+    combineLLM: chatModel2,
     returnIntermediateSteps: false,
   });
 
@@ -102,7 +115,7 @@ export const ChatAPIData = async (props: PromptGPTProps) => {
 const findRelevantDocuments = async (query: string, chatThreadId: string) => {
   const vectorStore = initVectorStore();
 
-  const relevantDocuments = await vectorStore.similaritySearch(query, 10, {
+  const relevantDocuments = await vectorStore.similaritySearch(query, 5, {
     vectorFields: vectorStore.config.vectorFieldName,
     //filter: `user eq '${await userHashedId()}' and chatThreadId eq '${chatThreadId}'`,
     filter: `user eq '${await userHashedId()}'`,

@@ -16,20 +16,68 @@ import { initAndGuardChatSession } from "./chat-thread-service";
 import { FaqDocumentIndex, PromptGPTProps } from "./models";
 import { transformConversationStyleToTemperature } from "./utils";
 import { ConversationChain } from "langchain/chains";
+import { StringOutputParser } from "@langchain/core/output_parsers";
+import { RunnableSequence } from "@langchain/core/runnables";
+import { formatDocumentsAsString } from "langchain/util/document";
+const system_combine_template = `You will be provided with a document delimited by triple quotes and a question. Your task is to answer the question using only the provided document and to cite the passage(s) of the document used to answer the question. If the document does not contain the information needed to answer this question then simply write: "Insufficient information." If an answer to the question is provided, it must be annotated with a citation. Use the following format for to cite relevant passages:
 
-export const ChatAPIData = async (props: PromptGPTProps) => {
+   Citation format: """
+   If the document states: "The sky is blue."
+   Your answer with citation should look like this:
+   "The sky is blue." (QUOTE_ID: 1)
+   
+   If the document states: "The cat sat on the mat."
+   Your answer with citation should look like this:
+   "The cat sat on the mat." (QUOTE_ID: 3)
+   """
+   context: """{context}"""
+   `;
+
+export const ChatAPIData2 = async (props: PromptGPTProps) => {
   const { lastHumanMessage, id, chatThread } = await initAndGuardChatSession(
     props
   );
 
   const chatModel = new ChatOpenAI({
-    temperature: transformConversationStyleToTemperature(
-      chatThread.conversationStyle
-    ),
+    temperature: 0,
     streaming: true,
     verbose: true,
   });
 
+  const vectorStore = initVectorStore();
+  const vectorStoreRetriever = vectorStore.asRetriever(3, {
+    vectorFields: vectorStore.config.vectorFieldName,
+    //filter: `user eq '${await userHashedId()}' and chatThreadId eq '${id}'`,
+    filter: `user eq '${await userHashedId()}'`,
+  });
+  const messages = [
+    SystemMessagePromptTemplate.fromTemplate(system_combine_template),
+    HumanMessagePromptTemplate.fromTemplate("{question}"),
+  ];
+  const prompt = ChatPromptTemplate.fromMessages(messages);
+  const chain = RunnableSequence.from([
+    {
+      sourceDocuments: RunnableSequence.from([
+        (input) => input.question,
+        vectorStoreRetriever,
+      ]),
+      question: (input) => input.question,
+    },
+    {
+      sourceDocuments: (previousStepResult) =>
+        previousStepResult.sourceDocuments,
+      question: (previousStepResult) => previousStepResult.question,
+      context: (previousStepResult) =>
+        formatDocumentsAsString(previousStepResult.sourceDocuments),
+    },
+    {
+      result: prompt.pipe(chatModel).pipe(new StringOutputParser()),
+      sourceDocuments: (previousStepResult) =>
+        previousStepResult.sourceDocuments,
+    },
+  ]);
+
+  /*
   const relevantDocuments = (
     await findRelevantDocuments(lastHumanMessage.content, id)
   ).map((doc, index) => ({ ...doc, quoteId: index }));
@@ -43,6 +91,7 @@ export const ChatAPIData = async (props: PromptGPTProps) => {
     combinePrompt: defineSystemPrompt(),
     returnIntermediateSteps: false,
   });
+  */
 
   const { stream, handlers } = LangChainStream({
     onToken: async (token: string) => {},
@@ -67,6 +116,18 @@ export const ChatAPIData = async (props: PromptGPTProps) => {
     }),
   });
 
+  const res = await chain.invoke({
+    question: lastHumanMessage.content,
+    memory: memory,
+  });
+
+  const quoteFileIds = res.sourceDocuments.map((doc: any) => {
+    return doc.id;
+  });
+  console.log("quoteFiles:", quoteFileIds);
+  //console.log(JSON.stringify(res, null, 2));
+
+  /*
   //const ret = await
   chain.call(
     {
@@ -76,6 +137,7 @@ export const ChatAPIData = async (props: PromptGPTProps) => {
     },
     [handlers]
   );
+  */
   /*
   const content = ret.text;
   console.log("content", content);

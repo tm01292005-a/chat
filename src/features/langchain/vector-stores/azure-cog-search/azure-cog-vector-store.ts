@@ -218,7 +218,6 @@ export class AzureCogSearch<
       method: "POST",
       body: JSON.stringify(searchBody),
     })) as DocumentSearchResponseModel<Document<TModel> & DocumentSearchModel>;
-
     return resultDocuments.value.map((doc) => [doc, doc["@search.score"] || 0]);
   }
 

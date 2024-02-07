@@ -3,8 +3,7 @@
 import React, { FC, createContext, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useGlobalMessageContext } from "@/features/global-message/global-message-context";
-import { convertMp4ToMp3 } from "./mp4-to-mp3-convert";
-
+import { convertMp4ToMp3, ConvertedAudio } from "./mp4-to-mp3-convert";
 import {
   AudioRecordModel,
   TRANSLATE_STATUS,
@@ -74,7 +73,7 @@ export const AudioProvider: FC<Prop> = (props) => {
   const handleOnUpload = useCallback(
     async (files: File[]) => {
       const { id: userId } = props;
-      const [file] = files;
+      let [file] = files;
       const fileName = file.name;
       const title = fileName.replace(/\.[^/.]+$/, "");
       const fileType = (fileName.match(/\.(.+)$/i) || [""])[1]?.toLowerCase();
@@ -87,6 +86,13 @@ export const AudioProvider: FC<Prop> = (props) => {
         // ファイル形式チェック
         if (!["mp3", "wav", "mp4", "m4a"].includes(fileType)) {
           throw new Error("File extension must be either mp3, wav, mp4, m4a.");
+        }
+        if (fileType === "m4a") {
+          const blob = await convertMp4ToMp3(file);
+          if (blob === undefined) {
+            throw new Error("Failed to convert mp4 to mp3.");
+          }
+          file = new File([blob], `${title}.mp3`, { type: "audio/mp3" });
         }
 
         // DBにレコードを作成

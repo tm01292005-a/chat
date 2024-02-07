@@ -20,7 +20,17 @@ export const ChatAPISimple = async (props: PromptGPTProps) => {
     props
   );
 
-  const { stream, handlers } = LangChainStream();
+  const { stream, handlers } = LangChainStream({
+    onStart: async () => {
+      console.log("start");
+    },
+    onCompletion: async (completion: string) => {
+      console.log("completion", completion);
+    },
+    onFinal: async (completion: string) => {
+      console.log("final", completion);
+    },
+  });
 
   const userId = await userHashedId();
 
