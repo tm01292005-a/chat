@@ -1,7 +1,13 @@
+import { z } from "zod";
+import { LLMResult } from "langchain/schema";
+
 import { userHashedId } from "@/features/auth/helpers";
 import { CosmosDBChatMessageHistory } from "@/features/langchain/memory/cosmosdb/cosmosdb";
-import { LangChainStream, StreamingTextResponse } from "ai";
-import { loadQAMapReduceChain, loadQARefineChain } from "langchain/chains";
+import {
+  LangChainStream,
+  StreamingTextResponse,
+  experimental_StreamData,
+} from "ai";
 import { ChatOpenAI } from "langchain/chat_models/openai";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { BufferWindowMemory } from "langchain/memory";
@@ -14,11 +20,61 @@ import { AzureCogSearch } from "../../langchain/vector-stores/azure-cog-search/a
 import { insertPromptAndResponse } from "./chat-service";
 import { initAndGuardChatSession } from "./chat-thread-service";
 import { FaqDocumentIndex, PromptGPTProps } from "./models";
-import { transformConversationStyleToTemperature } from "./utils";
-import { ConversationChain } from "langchain/chains";
 import { StringOutputParser } from "@langchain/core/output_parsers";
+import { Generation } from "@langchain/core/outputs";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { formatDocumentsAsString } from "langchain/util/document";
+import { Document } from "@langchain/core/documents";
+import { RunnablePassthrough, RunnableMap } from "@langchain/core/runnables";
+import { StructuredTool } from "@langchain/core/tools";
+import { formatToOpenAITool } from "@langchain/openai";
+import { JsonOutputKeyToolsParser } from "langchain/output_parsers";
+import { CallbackManager } from "langchain/callbacks";
+
+const outputParser = new JsonOutputKeyToolsParser({
+  keyName: "cited_answer",
+  returnSingle: true,
+});
+
+class CitedAnswer extends StructuredTool {
+  name = "cited_answer";
+
+  description =
+    "Answer the user question based only on the given sources, and cite the sources used.";
+
+  schema = z.object({
+    answer: z
+      .string()
+      .describe(
+        "The answer to the user question, which is based only on the given sources."
+      ),
+    citations: z
+      .array(z.number())
+      .describe("The IDs of the SPECIFIC sources which justify the answer."),
+  });
+
+  constructor() {
+    super();
+  }
+
+  _call(input: z.infer<(typeof this)["schema"]>): Promise<string> {
+    return Promise.resolve(JSON.stringify(input, null, 2));
+  }
+}
+
+const llm = new ChatOpenAI({
+  temperature: 0,
+  streaming: true,
+  verbose: true,
+});
+
+const asOpenAITool = formatToOpenAITool(new CitedAnswer());
+const tools1 = [asOpenAITool];
+const llmWithTool1 = llm.bind({
+  tools: tools1,
+  tool_choice: asOpenAITool,
+});
+
 const system_combine_template = `You will be provided with a document delimited by triple quotes and a question. Your task is to answer the question using only the provided document and to cite the passage(s) of the document used to answer the question. If the document does not contain the information needed to answer this question then simply write: "Insufficient information." If an answer to the question is provided, it must be annotated with a citation. Use the following format for to cite relevant passages:
 
    Citation format: """
@@ -37,11 +93,44 @@ export const ChatAPIData2 = async (props: PromptGPTProps) => {
   const { lastHumanMessage, id, chatThread } = await initAndGuardChatSession(
     props
   );
+  const data = new experimental_StreamData();
+  data.append({
+    text: "Some custom data",
+  });
+
+  const { stream, handlers } = LangChainStream({
+    onToken: async (token: string) => {},
+    onCompletion: async (completion: string) => {
+      completion = completion + "TEST";
+      console.log("completion", completion);
+      await insertPromptAndResponse(id, lastHumanMessage.content, completion);
+    },
+    onFinal: async (completion: string) => {
+      console.log("final", completion);
+    },
+    experimental_streamData: true,
+  });
+  data.append({
+    text: "Hello, how are you?",
+  });
 
   const chatModel = new ChatOpenAI({
     temperature: 0,
     streaming: true,
     verbose: true,
+    callbackManager: CallbackManager.fromHandlers({
+      handleLLMEnd: async (output: LLMResult, runId: string) => {
+        output.generations.map(
+          (value: Generation[], index: number, array: Generation[][]) => {
+            console.log("value", value);
+            console.log("array", array);
+          }
+        );
+      },
+      handleLLMError: async (err: any, runId: string) => {
+        console.log("handleLLMError", err, runId);
+      },
+    }),
   });
 
   const vectorStore = initVectorStore();
@@ -50,11 +139,39 @@ export const ChatAPIData2 = async (props: PromptGPTProps) => {
     //filter: `user eq '${await userHashedId()}' and chatThreadId eq '${id}'`,
     filter: `user eq '${await userHashedId()}'`,
   });
+
   const messages = [
     SystemMessagePromptTemplate.fromTemplate(system_combine_template),
     HumanMessagePromptTemplate.fromTemplate("{question}"),
   ];
   const prompt = ChatPromptTemplate.fromMessages(messages);
+
+  const formatDocsWithId = (docs: Array<Document>): string => {
+    return (
+      "\n\n" +
+      docs
+        .map(
+          (doc: Document, idx: number) =>
+            `Source ID: ${idx}\nArticle title: ${doc.metadata.title}\nArticle Snippet: ${doc.pageContent}`
+        )
+        .join("\n\n")
+    );
+  };
+
+  const answerChain1 = prompt.pipe(llmWithTool1).pipe(outputParser);
+  const map1 = RunnableMap.from({
+    question: new RunnablePassthrough(),
+    docs: vectorStoreRetriever,
+  });
+  const chain1 = map1
+    .assign({
+      context: (input: { docs: Array<Document> }) =>
+        formatDocsWithId(input.docs),
+    })
+    .assign({ cited_answer: answerChain1 })
+    .pick(["cited_answer", "docs"]);
+  //  const aaa = await chain1.invoke(lastHumanMessage.content);
+
   const chain = RunnableSequence.from([
     {
       sourceDocuments: RunnableSequence.from([
@@ -93,16 +210,8 @@ export const ChatAPIData2 = async (props: PromptGPTProps) => {
   });
   */
 
-  const { stream, handlers } = LangChainStream({
-    onToken: async (token: string) => {},
-    onCompletion: async (completion: string) => {
-      console.log("completion", completion);
-      await insertPromptAndResponse(id, lastHumanMessage.content, completion);
-    },
-    onFinal: async (completion: string) => {
-      console.log("final", completion);
-    },
-  });
+  const aaa = await chain1.invoke(lastHumanMessage.content);
+  console.log("aaa", aaa);
 
   const userId = await userHashedId();
 
@@ -158,7 +267,7 @@ export const ChatAPIData2 = async (props: PromptGPTProps) => {
   outputChain.call({ input: content }, [handlers]);
   */
 
-  return new StreamingTextResponse(stream);
+  return new StreamingTextResponse(stream, {}, data);
 };
 
 const findRelevantDocuments = async (query: string, chatThreadId: string) => {

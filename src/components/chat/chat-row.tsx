@@ -3,42 +3,26 @@ import { ChatRole } from "@/features/chat/chat-services/models";
 import { isNotNullOrEmpty } from "@/features/chat/chat-services/utils";
 import { cn } from "@/lib/utils";
 import { CheckIcon, ClipboardIcon, UserCircle, Star } from "lucide-react";
-import { FC, useEffect, useState } from "react";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
+import { FC, useState } from "react";
 import Typography from "../typography";
 import { Avatar, AvatarImage } from "../ui/avatar";
 import { Button } from "../ui/button";
-import { CodeBlock } from "./code-block";
-import { MemoizedReactMarkdown } from "./memoized-react-markdown";
 import {
   FindAllChats,
   UpdateChat,
   FindChatById,
 } from "@/features/chat/chat-services/chat-service";
-import { ChatMessageModel } from "@/features/chat/chat-services/models";
-
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
-import { DataTableDemo } from "@/components/chat/demo";
-import { useChatContext } from "@/features/chat/chat-ui/chat-context";
-import { Label } from "@/components/ui/label";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-  SheetFooter,
-  SheetClose,
-} from "@/components/ui/sheet";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { findRelevantDocument } from "@/features/chat/chat-services/chat-document-service";
+import { ChatQuoteRow } from "./chat-quote-row";
+import { CodeBlock } from "./code-block";
+import { MemoizedReactMarkdown } from "./memoized-react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 
 interface ChatRowProps {
   name: string;
@@ -54,14 +38,27 @@ interface ChatRowProps {
 }
 
 const ChatRow: FC<ChatRowProps> = (props) => {
-  const { selectedFile } = useChatContext();
-
   const [rating, setRating] = useState(props.feedbackStar);
   const [hover, setHover] = useState(0);
   const [feedbackMessage, setFeedbackMessage] = useState(props.feedbackMessage);
   const [openPopover, setOpenPopover] = useState<number | null>(null);
   const [canShowPopover, setCanShowPopover] = useState(true);
   const [hasStarClicked, setHasStarClicked] = useState(false);
+
+  const docIds: string[] = [];
+  let message = props.message;
+  const matches = message.match(/\[(.*?)\]/g);
+  if (matches) {
+    matches.forEach((match) => {
+      let id = match.replace(" ", "");
+      id = id.replace("[", "");
+      id = id.replace("]", "");
+      docIds.push(id);
+    });
+    docIds.map((id, index) => {
+      message = message.replaceAll(id, index.toString());
+    });
+  }
 
   const [isIconChecked, setIsIconChecked] = useState(false);
   const toggleIcon = () => {
@@ -70,7 +67,7 @@ const ChatRow: FC<ChatRowProps> = (props) => {
 
   const handleButtonClick = () => {
     toggleIcon();
-    navigator.clipboard.writeText(props.message);
+    navigator.clipboard.writeText(message);
   };
 
   const loadAndUpsertChat = async () => {
@@ -134,54 +131,6 @@ const ChatRow: FC<ChatRowProps> = (props) => {
     setCanShowPopover(false);
   };
 
-  //  console.log("selectedFile=", selectedFile);
-
-  const PComponent = ({ children }) => {
-    const docId = "MjtlxYnpOgQf96cIsohGM";
-    const [quoteContext, setQuoteContext] = useState("");
-
-    useEffect(() => {
-      const fetchQuoteContext = async () => {
-        const result = await findRelevantDocument(docId);
-        setQuoteContext(result);
-      };
-
-      fetchQuoteContext();
-    }, [docId]);
-
-    return (
-      <>
-        <p className="mb-2 last:mb-0">{children}</p>
-        <div className="grid grid-cols-2 gap-2">
-          <Sheet key={"bottom"}>
-            <SheetTrigger asChild>
-              <Button variant="outline">{"bottom"}</Button>
-            </SheetTrigger>
-            <SheetContent side={"bottom"}>
-              <SheetHeader>
-                <SheetDescription>引用</SheetDescription>
-              </SheetHeader>
-              <div className="grid gap-4 py-4">
-                <ScrollArea className="h-72 w-48 rounded-md border">
-                  <div className="p-4">
-                    <div className="text-sm">{quoteContext}</div>
-                  </div>
-                </ScrollArea>
-                <div className="grid grid-cols-4 items-center gap-4"></div>
-                <div className="grid grid-cols-4 items-center gap-4"></div>
-              </div>
-              <SheetFooter>
-                <SheetClose asChild>
-                  <Button type="submit">Save changes</Button>
-                </SheetClose>
-              </SheetFooter>
-            </SheetContent>
-          </Sheet>
-        </div>
-      </>
-    );
-  };
-
   return (
     <div
       className={cn(
@@ -229,7 +178,6 @@ const ChatRow: FC<ChatRowProps> = (props) => {
             )}
           </Button>
         </div>
-
         <div
           className={cn(
             "-m-4 p-4",
@@ -240,49 +188,67 @@ const ChatRow: FC<ChatRowProps> = (props) => {
         >
           {/* https://github.com/vercel-labs/ai-chatbot/blob/main/components/markdown.tsx */}
           {props.type === "assistant" ? (
-            <MemoizedReactMarkdown
-              className="prose prose-slate dark:prose-invert break-words prose-p:leading-relaxed prose-pre:p-0 max-w-none"
-              remarkPlugins={[remarkGfm, remarkMath]}
-              components={{
-                p: PComponent,
-                code({ node, inline, className, children, ...props }) {
-                  if (children.length) {
-                    if (children[0] == "▍") {
+            <>
+              <MemoizedReactMarkdown
+                className="prose prose-slate dark:prose-invert break-words prose-p:leading-relaxed prose-pre:p-0 max-w-none"
+                remarkPlugins={[remarkGfm, remarkMath]}
+                components={{
+                  p({ children }) {
+                    return <p className="mb-2 last:mb-0">{children}</p>;
+                  },
+                  code({ node, inline, className, children, ...props }) {
+                    if (children.length) {
+                      if (children[0] == "▍") {
+                        return (
+                          <span className="mt-1 animate-pulse cursor-default">
+                            ▍
+                          </span>
+                        );
+                      }
+
+                      children[0] = (children[0] as string).replace("`▍`", "▍");
+                    }
+
+                    const match = /language-(\w+)/.exec(className || "");
+
+                    if (inline) {
                       return (
-                        <span className="mt-1 animate-pulse cursor-default">
-                          ▍
-                        </span>
+                        <code className={className} {...props}>
+                          {children}
+                        </code>
                       );
                     }
 
-                    children[0] = (children[0] as string).replace("`▍`", "▍");
-                  }
-
-                  const match = /language-(\w+)/.exec(className || "");
-
-                  if (inline) {
                     return (
-                      <code className={className} {...props}>
-                        {children}
-                      </code>
+                      <CodeBlock
+                        key={Math.random()}
+                        language={(match && match[1]) || ""}
+                        value={String(children).replace(/\n$/, "")}
+                        {...props}
+                      />
                     );
-                  }
-
-                  return (
-                    <CodeBlock
-                      key={Math.random()}
-                      language={(match && match[1]) || ""}
-                      value={String(children).replace(/\n$/, "")}
-                      {...props}
-                    />
-                  );
-                },
-              }}
-            >
-              {props.message}
-            </MemoizedReactMarkdown>
+                  },
+                }}
+              >
+                {message}
+              </MemoizedReactMarkdown>
+              <div className="flex flex-col">
+                {docIds.length > 0 && (
+                  <>
+                    引用:
+                    {docIds.map((id, index) => (
+                      <ChatQuoteRow
+                        key={index}
+                        index={index.toString()}
+                        docId={id}
+                      />
+                    ))}
+                  </>
+                )}
+              </div>
+            </>
           ) : (
-            props.message
+            message
           )}
         </div>
         <div style={{ display: "flex" }}>
