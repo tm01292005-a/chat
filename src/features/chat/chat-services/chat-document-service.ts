@@ -30,6 +30,7 @@ import DocumentIntelligence, {
   AnalyzeResultOperationOutput,
   isUnexpected,
 } from "@azure-rest/ai-document-intelligence";
+import * as XLSX from "xlsx";
 
 const MAX_DOCUMENT_SIZE = 20000000;
 
@@ -72,6 +73,32 @@ const LoadFile = async (formData: FormData) => {
     const file: File | null = formData.get("file") as unknown as File;
 
     const blob = new Blob([file], { type: file.type });
+
+    // EXCEL
+    /*
+    const buf = await file.arrayBuffer();
+    const data = new Uint8Array(buf);
+    const workbook = XLSX.read(data, { type: "array" });
+    const sheetNameList = workbook.SheetNames;
+    const allSheetsData = sheetNameList.map((sheetName) => {
+      return XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+    });
+    const docs: Document[] = [];
+    allSheetsData.map((sheetData) => {
+      sheetData.map((row: any) => {
+        const doc: Document = {
+          pageContent: row,
+          metadata: {
+            file: file.name,
+          },
+        };
+        docs.push(doc);
+      });
+    });
+    console.log("xlsxDocs", docs);
+    */
+
+    // WORD
     /*
     const docxLoader: DocxLoader = new DocxLoader(blob);
     const docxDocs = await docxLoader.loadAndSplit(
@@ -82,6 +109,8 @@ const LoadFile = async (formData: FormData) => {
     );
     console.log("docxDocs", docxDocs);
     */
+
+    // PPTX
     /*
     const pptxLoader: PPTXLoader = new PPTXLoader(blob);
     const pptxDocs = await pptxLoader.loadAndSplit(
@@ -92,6 +121,8 @@ const LoadFile = async (formData: FormData) => {
     );
     console.log("pptxDocs", pptxDocs);
     */
+
+    // PDF
     /*
     const pdfLoader: PDFLoader = new PDFLoader(blob);
     const pdfDocs = await pdfLoader.loadAndSplit(
@@ -103,22 +134,8 @@ const LoadFile = async (formData: FormData) => {
     console.log("pdfDocs", pdfDocs);
     */
 
-    /*
-    exec("python test.py", (error, stdout, stderr) => {
-      if (error) {
-        console.error(`exec error: ${error}`);
-        return;
-      }
-      console.log(`stdout: ${stdout}`);
-      console.error(`stderr: ${stderr}`);
-    });
-    */
-
     if (file && file.size < MAX_DOCUMENT_SIZE) {
       const client = initDocumentIntelligence();
-
-      //const blob = new Blob([file], { type: file.type });
-
       const buffer = await file.arrayBuffer();
       const base64Source = arrayBufferToBase64(buffer);
       const initialResponse = await client
@@ -129,8 +146,7 @@ const LoadFile = async (formData: FormData) => {
             base64Source,
           },
           queryParameters: {
-            //locale: "en-IN",
-            locale: "ja-JP",
+            locale: "ja-JP", //locale: "en-IN",
             split: "perPage",
           },
         });
@@ -170,15 +186,7 @@ const LoadFile = async (formData: FormData) => {
 
       const paragraphs = result.analyzeResult?.paragraphs;
 
-      /*
-      const poller = await client.beginAnalyzeDocument(
-        "prebuilt-read",
-        await blob.arrayBuffer()
-      );
-      const { paragraphs } = await poller.pollUntilDone();
-*/
       const docs: Document[] = [];
-
       if (paragraphs) {
         for (const paragraph of paragraphs) {
           const doc: Document = {
