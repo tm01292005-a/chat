@@ -21,14 +21,8 @@ export const ChatAPISimple = async (props: PromptGPTProps) => {
   );
 
   const { stream, handlers } = LangChainStream({
-    onStart: async () => {
-      console.log("start");
-    },
     onCompletion: async (completion: string) => {
       console.log("completion", completion);
-    },
-    onFinal: async (completion: string) => {
-      console.log("final", completion);
     },
   });
 

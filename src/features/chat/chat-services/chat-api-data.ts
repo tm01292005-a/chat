@@ -1,12 +1,7 @@
 import { userHashedId } from "@/features/auth/helpers";
 import { CosmosDBChatMessageHistory } from "@/features/langchain/memory/cosmosdb/cosmosdb";
-import {
-  LangChainStream,
-  StreamingTextResponse,
-  experimental_StreamData,
-} from "ai";
-import { loadQAMapReduceChain, loadQARefineChain } from "langchain/chains";
-import { CallbackManager } from "langchain/callbacks";
+import { LangChainStream, StreamingTextResponse } from "ai";
+import { loadQAMapReduceChain } from "langchain/chains";
 import { ChatOpenAI } from "langchain/chat_models/openai";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { BufferWindowMemory } from "langchain/memory";
@@ -24,7 +19,6 @@ export const ChatAPIData = async (props: PromptGPTProps) => {
   const { lastHumanMessage, id, chatThread } = await initAndGuardChatSession(
     props
   );
-  const data = new experimental_StreamData();
 
   const chatModel = new ChatOpenAI({
     temperature: 0,
@@ -35,25 +29,23 @@ export const ChatAPIData = async (props: PromptGPTProps) => {
     temperature: 0,
     streaming: true,
     verbose: true,
-    callbackManager: CallbackManager.fromHandlers({
-      handleLLMEnd: async (output, runId) => {
-        if (output) {
-          output.llmOutput = undefined;
-          console.log("output", output);
-          console.log("runId", runId);
-        }
-      },
+  });
+
+  const userId = await userHashedId();
+  const memory = new BufferWindowMemory({
+    k: 100,
+    returnMessages: true,
+    memoryKey: "history",
+    chatHistory: new CosmosDBChatMessageHistory({
+      sessionId: id,
+      userId: userId,
     }),
   });
 
   const relevantDocuments = (
     await findRelevantDocuments(lastHumanMessage.content, id)
   ).map((doc, index) => ({ ...doc, quoteId: doc.id }));
-  //  console.log("relevantDocuments", relevantDocuments);
   relevantDocuments.forEach((doc) => {
-    data.append({
-      text: `[${doc.quoteId}]${doc.pageContent}`,
-    });
     doc.pageContent = `<${doc.quoteId}>${doc.pageContent}</${doc.quoteId}>`;
   });
 
@@ -67,25 +59,8 @@ export const ChatAPIData = async (props: PromptGPTProps) => {
 
   const { stream, handlers } = LangChainStream({
     onCompletion: async (completion: string) => {
-      console.log("completion", completion);
-      completion = completion.replace("リンク", "ゼルダ");
       await insertPromptAndResponse(id, lastHumanMessage.content, completion);
     },
-    onFinal(completion) {
-      data.close();
-    },
-    //experimental_streamData: true,
-  });
-
-  const userId = await userHashedId();
-  const memory = new BufferWindowMemory({
-    k: 100,
-    returnMessages: true,
-    memoryKey: "history",
-    chatHistory: new CosmosDBChatMessageHistory({
-      sessionId: id,
-      userId: userId,
-    }),
   });
 
   //const ret = await
