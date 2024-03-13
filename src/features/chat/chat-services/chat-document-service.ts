@@ -1,21 +1,25 @@
 "use server";
 
-import { userHashedId } from "@/features/auth/helpers";
-import { CosmosDBContainer } from "@/features/common/cosmos";
-import { AzureCogSearch } from "@/features/langchain/vector-stores/azure-cog-search/azure-cog-vector-store";
-import {
-  AzureKeyCredential,
-  DocumentAnalysisClient,
-} from "@azure/ai-form-recognizer";
+import DocumentIntelligence, {
+  getLongRunningPoller,
+  AnalyzeResultOperationOutput,
+  isUnexpected,
+} from "@azure-rest/ai-document-intelligence";
+import { AzureKeyCredential } from "@azure/ai-form-recognizer";
 import { SqlQuerySpec } from "@azure/cosmos";
 import { Document } from "langchain/document";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { DocxLoader } from "langchain/document_loaders/fs/docx";
 import { PPTXLoader } from "langchain/document_loaders/fs/pptx";
 import { PDFLoader } from "langchain/document_loaders/fs/pdf";
-import { UnstructuredLoader } from "langchain/document_loaders/fs/unstructured";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
+import { exec } from "child_process";
+import * as XLSX from "xlsx";
 import { nanoid } from "nanoid";
+
+import { userHashedId } from "@/features/auth/helpers";
+import { CosmosDBContainer } from "@/features/common/cosmos";
+import { AzureCogSearch } from "@/features/langchain/vector-stores/azure-cog-search/azure-cog-vector-store";
 import {
   CHAT_DOCUMENT_ATTRIBUTE,
   ChatDocumentModel,
@@ -23,14 +27,6 @@ import {
   ServerActionResponse,
 } from "./models";
 import { isNotNullOrEmpty } from "./utils";
-import { exec } from "child_process";
-//import DocumentIntelligence from "@azure-rest/ai-document-intelligence";
-import DocumentIntelligence, {
-  getLongRunningPoller,
-  AnalyzeResultOperationOutput,
-  isUnexpected,
-} from "@azure-rest/ai-document-intelligence";
-import * as XLSX from "xlsx";
 
 const MAX_DOCUMENT_SIZE = 20000000;
 
@@ -68,11 +64,49 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
+const toUnicode = (str: string) => {
+  let result = [];
+  for (let i = 0; i < str.length; i++) {
+    result.push("\\u" + ("000" + str[i].charCodeAt(0).toString(16)).substr(-4));
+  }
+  return result;
+};
+
+const isUnicode = (str: string): boolean => {
+  const replacementCharacter = "\\ufffd"; // 文字化け
+  const unicodeCharacters = toUnicode(str);
+  for (let i = 0, len = unicodeCharacters.length; i < len; i++) {
+    if (replacementCharacter === unicodeCharacters[i]) {
+      return false;
+    }
+  }
+  return true;
+};
+
 const LoadFile = async (formData: FormData) => {
   try {
     const file: File | null = formData.get("file") as unknown as File;
 
     const blob = new Blob([file], { type: file.type });
+
+    if (file.name.endsWith(".txt") || file.name.endsWith(".csv")) {
+      let text = await blob.text();
+      if (!isUnicode(text)) {
+        // Unicodeでない場合はShift_JISとしてデコードする
+        const decoder = new TextDecoder("shift_jis");
+        text = decoder.decode(new Uint8Array(await blob.arrayBuffer()));
+      }
+
+      const docs: Document[] = [];
+      const doc: Document = {
+        pageContent: text,
+        metadata: {
+          file: file.name,
+        },
+      };
+      docs.push(doc);
+      return { docs };
+    }
 
     // EXCEL
     /*
