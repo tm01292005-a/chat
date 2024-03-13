@@ -1,0 +1,30 @@
+const { BlobServiceClient, StorageSharedKeyCredential, generateBlobSASQueryParameters, BlobSASPermissions } = require('@azure/storage-blob');
+
+async function generateSasToken() {
+  const account = 'your-storage-account-name';
+  const accountKey = 'your-storage-account-key';
+  const containerName = 'your-container-name';
+  const blobName = 'your-blob-name';
+
+  const sharedKeyCredential = new StorageSharedKeyCredential(account, accountKey);
+  const blobServiceClient = new BlobServiceClient(
+    `https://${account}.blob.core.windows.net`,
+    sharedKeyCredential
+  );
+
+  const containerClient = blobServiceClient.getContainerClient(containerName);
+  const blobClient = containerClient.getBlobClient(blobName);
+
+  const blobSAS = generateBlobSASQueryParameters({
+    containerName,
+    blobName,
+    permissions: BlobSASPermissions.parse('r'), // 'r' for read
+    startsOn: new Date(),
+    expiresOn: new Date(new Date().valueOf() + 86400), // 24 hours later
+  }, sharedKeyCredential).toString();
+
+  const sasUrl = blobClient.url + "?" + blobSAS;
+  console.log(`SAS URL is ${sasUrl}`);
+}
+
+generateSasToken().catch(console.error);
