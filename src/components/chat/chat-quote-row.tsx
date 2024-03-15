@@ -16,28 +16,29 @@ interface ChatQuoteRowProps {
 }
 
 export const ChatQuoteRow: FC<ChatQuoteRowProps> = ({ index, docId }) => {
-  const [quoteFileName, setQuoteFileName] = useState("");
-  const [quoteContext, setQuoteContext] = useState("");
+  const [quote, setQuote] = useState({ fileName: "", context: "" });
 
   useEffect(() => {
-    const findDoc = async (docId: string) => {
-      if (docId !== "") {
+    const findDoc = async () => {
+      if (docId) {
         const result = await findRelevantDocument(docId);
-        if (result) {
-          setQuoteFileName(result.fileName);
-          setQuoteContext(result.context);
+        if (result && result.context) {
+          setQuote({ fileName: result.fileName, context: result.context });
+        } else {
+          // Retry after a delay
+          setTimeout(findDoc, 5000); // 5000 milliseconds = 5 seconds
         }
       }
     };
-    findDoc(docId);
-  }, []);
+    findDoc();
+  }, [docId]);
 
   return (
     <div key={docId}>
       <Sheet key={"bottom"}>
         <SheetTrigger asChild>
           <Button variant="outline" size="sm" type="submit">
-            [{index}]: {quoteFileName}
+            [{index}]: {quote.fileName}
           </Button>
         </SheetTrigger>
         <SheetContent
@@ -48,7 +49,7 @@ export const ChatQuoteRow: FC<ChatQuoteRowProps> = ({ index, docId }) => {
             <SheetDescription>引用</SheetDescription>
           </SheetHeader>
           <ScrollArea className="flex-1 flex -mx-6">
-            <div className="px-6 whitespace-pre-wrap">{quoteContext}</div>
+            <div className="px-6 whitespace-pre-wrap">{quote.context}</div>
           </ScrollArea>
         </SheetContent>
       </Sheet>
