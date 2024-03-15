@@ -14,17 +14,14 @@ import {
 import { initAndGuardChatSession } from "./chat-thread-service";
 import { PromptGPTProps } from "./models";
 import { transformConversationStyleToTemperature } from "./utils";
+import { handleLLMError, handleChainError } from "./chat-api-error-handle";
 
 export const ChatAPISimple = async (props: PromptGPTProps) => {
   const { lastHumanMessage, id, chatThread } = await initAndGuardChatSession(
     props
   );
 
-  const { stream, handlers } = LangChainStream({
-    onCompletion: async (completion: string) => {
-      console.log("completion", completion);
-    },
-  });
+  const { stream, writer, handlers } = LangChainStream();
 
   const userId = await userHashedId();
 
@@ -61,7 +58,24 @@ export const ChatAPISimple = async (props: PromptGPTProps) => {
     prompt: chatPrompt,
   });
 
-  chain.call({ input: lastHumanMessage.content }, [handlers]);
+  chain
+    .invoke(
+      { input: lastHumanMessage.content },
+      {
+        callbacks: [
+          {
+            ...handlers,
+            handleLLMError: async (e: Error, runId: string) => {
+              await handleLLMError(e, runId, writer);
+            },
+            handleChainError: async (e: Error, runId: string) => {
+              await handleChainError(e, runId, writer);
+            },
+          },
+        ],
+      }
+    )
+    .catch((e) => console.error(e));
 
   return new StreamingTextResponse(stream);
 };

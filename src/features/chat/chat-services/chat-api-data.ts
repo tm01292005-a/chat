@@ -14,6 +14,7 @@ import { AzureCogSearch } from "../../langchain/vector-stores/azure-cog-search/a
 import { insertPromptAndResponse } from "./chat-service";
 import { initAndGuardChatSession } from "./chat-thread-service";
 import { FaqDocumentIndex, PromptGPTProps } from "./models";
+import { handleLLMError, handleChainError } from "./chat-api-error-handle";
 
 export const ChatAPIData = async (props: PromptGPTProps) => {
   const { lastHumanMessage, id, chatThread } = await initAndGuardChatSession(
@@ -46,7 +47,7 @@ export const ChatAPIData = async (props: PromptGPTProps) => {
     await findRelevantDocuments(lastHumanMessage.content, id)
   ).map((doc, index) => ({ ...doc, quoteId: doc.id }));
   relevantDocuments.forEach((doc) => {
-    doc.pageContent = `<${doc.quoteId}>${doc.pageContent}</${doc.quoteId}>`;
+    doc.pageContent = `----------------\n<${doc.quoteId}>${doc.pageContent}</${doc.quoteId}>`;
   });
 
   // AIが回答を生成する際に、どのドキュメントが使用されたかを追跡
@@ -57,23 +58,34 @@ export const ChatAPIData = async (props: PromptGPTProps) => {
     returnIntermediateSteps: false,
   });
 
-  const { stream, handlers } = LangChainStream({
+  const { stream, writer, handlers } = LangChainStream({
     onCompletion: async (completion: string) => {
       await insertPromptAndResponse(id, lastHumanMessage.content, completion);
     },
   });
 
-  //const ret = await
-  chain.call(
+  chain.invoke(
     {
       input_documents: relevantDocuments,
       question: lastHumanMessage.content,
       memory: memory,
     },
-    [handlers]
+    {
+      callbacks: [
+        {
+          ...handlers,
+          handleLLMError: async (e: Error, runId: string) => {
+            await handleLLMError(e, runId, writer);
+          },
+          handleChainError: async (e: Error, runId: string) => {
+            await handleChainError(e, runId, writer);
+          },
+        },
+      ],
+    }
   );
 
-  return new StreamingTextResponse(stream, {});
+  return new StreamingTextResponse(stream);
 };
 
 const findRelevantDocuments = async (query: string, chatThreadId: string) => {
@@ -91,10 +103,10 @@ const defineSystemPrompt = () => {
   const system_combine_template = `You will be provided with a document delimited by triple quotes and a question. Your task is to answer the question using only the provided document and to cite the passage(s) of the document used to answer the question. If the document does not contain the information needed to answer this question then simply write: "Insufficient information." If an answer to the question is provided, it must be annotated with a citation. Use the following format for to cite relevant passages:
 
    Citation format: """
-   If the document states: "----------------\nThe sky is blue. [qa3WOHjnPNY9dxHMhi4N]"
+   If the document states: "----------------\n<qa3WOHjnPNY9dxHMhi4N>The sky is blue.</qa3WOHjnPNY9dxHMhi4N>"
    Your answer with citation should look like this: "The sky is blue. [qa3WOHjnPNY9dxHMhi4N]" 
    
-   If the document states: "The cat sat on the mat. [cGAMq3hrSA-tamX0AK9JV]"
+   If the document states: "----------------\n<cGAMq3hrSA-tamX0AK9JV>The cat sat on the mat.</cGAMq3hrSA-tamX0AK9JV>"
    Your answer with citation should look like this: "The cat sat on the mat. [cGAMq3hrSA-tamX0AK9JV]" 
    """
 
@@ -116,11 +128,11 @@ const defineCombineMapSystemPrompt = () => {
   Return any relevant text verbatim.If an answer to the question is provided, it must be annotated with a citation. Use the following format for to cite relevant passages:
 
   Citation format: """
-  If the document states: "<qa3WOHjnPNY9dxHMhi4N>The sky is blue.</qa3WOHjnPNY9dxHMhi4N>"
-  Your answer with citation should look like this: "----------------\nThe sky is blue. [qa3WOHjnPNY9dxHMhi4N]"
+  If the document states: "----------------\n<qa3WOHjnPNY9dxHMhi4N>The sky is blue.</qa3WOHjnPNY9dxHMhi4N>"
+  Your answer with citation should look like this: "The sky is blue. [qa3WOHjnPNY9dxHMhi4N]"
   
-  If the document states: "<cGAMq3hrSA-tamX0AK9JV>The cat sat on the mat.</cGAMq3hrSA-tamX0AK9JV>"
-  Your answer with citation should look like this: "----------------\nThe cat sat on the mat. [cGAMq3hrSA-tamX0AK9JV]"
+  If the document states: "----------------\n<cGAMq3hrSA-tamX0AK9JV>The cat sat on the mat.</cGAMq3hrSA-tamX0AK9JV>"
+  Your answer with citation should look like this: "The cat sat on the mat. [cGAMq3hrSA-tamX0AK9JV]"
   """
 
   ----------------
